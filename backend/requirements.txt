@@ -6,6 +6,7 @@ Flask-SocketIO
 python-socketio
 python-engineio
 websockets
+websocket-client
 pydub
 gevent
 greenlet

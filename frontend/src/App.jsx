@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-const SOCKET_SERVER_URL = 'http://localhost:5000';
+const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5000';
 const AUDIO_CHUNK_INTERVAL = 100; // ms
 
 function App() {
