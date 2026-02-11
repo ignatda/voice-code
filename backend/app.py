@@ -1,8 +1,7 @@
+import base64
 import json
 import os
-from typing import Any
 
-import gevent
 from gevent import monkey
 monkey.patch_all() # Must be called before other imports that are affected by monkey-patching
 
@@ -10,7 +9,7 @@ from dotenv import load_dotenv # Import load_dotenv
 load_dotenv() # Load environment variables from .env
 
 from flask import Flask, request
-from flask_socketio import SocketIO, emit, join_room, leave_room
+from flask_socketio import SocketIO, emit, join_room
 from websocket import create_connection, WebSocketConnectionClosedException
 
 app = Flask(__name__)
@@ -42,7 +41,7 @@ def on_xai_open(ws):
         "type": "session.update",
         "session": {
             "modalities": ["text"],
-            "instructions": "Transcribe the audio accurately in English or Russian.",
+            "instructions": "Transcribe the audio accurately. Use English for all IT terminology, programming keywords, code-related words, technical terms, and coding concepts (e.g., function, class, variable, array, string, import, return, etc.). Use Russian only for general conversational words and non-technical speech.",
             "input_audio_format": "pcm16",
             "input_audio_transcription": {
                 "model": "whisper-1"
@@ -72,14 +71,14 @@ def handle_xai_messages(ws, sid):
 
 @socketio.on('connect')
 def connect():
-    sid = request.sid # Get the session ID for the connected client
+    sid = request.sid  # type: ignore
     print(f'Client connected: {sid}')
     join_room(sid) # Each client gets their own room named after their sid
     emit('my response', {'data': f'Connected. Send start_transcription_stream to begin.'}, room=sid)
 
 @socketio.on('disconnect')
 def disconnect():
-    sid = request.sid
+    sid = request.sid  # type: ignore
     print(f'Client disconnected: {sid}')
     if sid in xai_connections:
         print(f"Closing x.ai connection for SID {sid} due to client disconnect.")
@@ -91,7 +90,7 @@ def disconnect():
 
 @socketio.on('start_transcription_stream')
 def start_transcription_stream():
-    sid = request.sid
+    sid = request.sid  # type: ignore
     print(f"Client {sid} requested to start transcription stream.")
     if not XAI_API_KEY:
         emit('error', {'message': 'XAI_API_KEY not configured on server.'}, room=sid)
@@ -120,11 +119,10 @@ def start_transcription_stream():
 
 @socketio.on('audio_chunk')
 def handle_audio_chunk(data):
-    sid = request.sid
+    sid = request.sid  # type: ignore
     if sid in xai_connections:
         ws = xai_connections[sid]
         try:
-            import base64
             audio_base64 = base64.b64encode(data).decode('utf-8')
             audio_event = {
                 "type": "input_audio_buffer.append",
@@ -137,7 +135,7 @@ def handle_audio_chunk(data):
 
 @socketio.on('commit_audio')
 def commit_audio():
-    sid = request.sid
+    sid = request.sid  # type: ignore
     if sid in xai_connections:
         ws = xai_connections[sid]
         try:
@@ -151,7 +149,7 @@ def commit_audio():
 
 @socketio.on('stop_transcription_stream')
 def stop_transcription_stream():
-    sid = request.sid
+    sid = request.sid  # type: ignore
     print(f"Client {sid} requested to stop transcription stream.")
     if sid in xai_connections:
         try:

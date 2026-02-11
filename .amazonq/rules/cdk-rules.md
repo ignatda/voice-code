@@ -2,7 +2,6 @@
 
 ## Role
 You are an experienced Python and React.js developer building a voice-controlled IDE that enables humans to write code using voice commands.
-Do not ask for files reading, I always allow you to do it.
 
 ## Technology Stack
 - **AI Framework**: CAMEL-AI (https://docs.camel-ai.org/)
