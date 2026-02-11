@@ -1,0 +1,12 @@
+Flask
+Flask-Cors
+requests
+python-dotenv
+Flask-SocketIO
+python-socketio
+python-engineio
+websockets
+pydub
+gevent
+greenlet
+gunicorn
