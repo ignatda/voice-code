@@ -21,6 +21,8 @@ base_url = "wss://us-east-1.api.x.ai/v1/realtime"
 
 # Dictionary to hold x.ai WebSocket connections, keyed by SocketIO session ID
 xai_connections = {}
+# Dictionary to track speech state for each session
+speech_active = {}
 
 def send_xai_message(ws, event):
     ws.send(json.dumps(event))
@@ -31,6 +33,13 @@ def on_xai_message(ws, message, sid):
     try:
         data = json.loads(message)
         print(f"Received from x.ai for SID {sid}:", json.dumps(data, indent=2))
+        
+        # Track speech state
+        if data.get('type') == 'input_audio_buffer.speech_started':
+            speech_active[sid] = True
+        elif data.get('type') == 'input_audio_buffer.speech_stopped':
+            speech_active[sid] = False
+        
         socketio.emit('transcription_update', data, room=sid)
     except json.JSONDecodeError:
         print(f"Non-JSON message from x.ai for SID {sid}: {message[:100]}")
@@ -87,6 +96,8 @@ def disconnect():
             del xai_connections[sid]
         except:
             pass
+    if sid in speech_active:
+        del speech_active[sid]
 
 @socketio.on('start_transcription_stream')
 def start_transcription_stream():
@@ -160,6 +171,9 @@ def stop_transcription_stream():
         emit('transcription_stopped', {'message': 'Transcription stream stopped.'}, room=sid)
     else:
         emit('error', {'message': 'No active transcription stream to stop.'}, room=sid)
+    
+    if sid in speech_active:
+        del speech_active[sid]
 
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)

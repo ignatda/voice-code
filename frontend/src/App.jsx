@@ -174,7 +174,8 @@ function App() {
 
         let silenceFrames = 0;
         const SILENCE_THRESHOLD = 0.01;
-        const SILENCE_FRAMES_BEFORE_COMMIT = 20;
+        const SILENCE_FRAMES_BEFORE_COMMIT = 8;
+        let isSilent = false;
 
         processor.onaudioprocess = (e) => {
           const inputData = e.inputBuffer.getChannelData(0);
@@ -187,17 +188,20 @@ function App() {
           }
           const rms = Math.sqrt(sum / inputData.length);
           
-          socketRef.current.emit('audio_chunk', pcm16.buffer);
-          
           if (rms < SILENCE_THRESHOLD) {
             silenceFrames++;
-            if (silenceFrames === SILENCE_FRAMES_BEFORE_COMMIT) {
+            if (silenceFrames === SILENCE_FRAMES_BEFORE_COMMIT && !isSilent) {
               console.log('Silence detected, committing audio');
               socketRef.current.emit('commit_audio');
-              silenceFrames = 0;
+              isSilent = true;
             }
           } else {
+            if (isSilent) {
+              console.log('Speech resumed');
+              isSilent = false;
+            }
             silenceFrames = 0;
+            socketRef.current.emit('audio_chunk', pcm16.buffer);
           }
         };
 
