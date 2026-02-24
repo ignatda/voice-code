@@ -12,3 +12,4 @@ gevent
 greenlet
 gunicorn
 camel-ai
+playwright
