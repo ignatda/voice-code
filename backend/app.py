@@ -12,6 +12,8 @@ from flask import Flask, request
 from flask_socketio import SocketIO, emit, join_room
 from websocket import create_connection, WebSocketConnectionClosedException
 
+from agents import OrchestratorAgent, BrowserAgent, IDEAgent
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'  # Consider using a more secure key in production
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='gevent') # Use gevent for async
@@ -24,15 +26,39 @@ xai_connections = {}
 # Dictionary to track speech state for each session
 speech_active = {}
 
+# Initialize agents
+orchestrator_agent = OrchestratorAgent()
+browser_agent = BrowserAgent()
+ide_agent = IDEAgent()
+
 def send_xai_message(ws, event):
     ws.send(json.dumps(event))
+
+def process_with_orchestrator(transcription: str, sid: str):
+    print(f"[orchestrator] Processing transcription, sid={sid[:8]}, text_len={len(transcription)}")
+    
+    result = orchestrator_agent.process(transcription)
+    
+    print(f"[orchestrator] Generated {len(result.get('prompts', []))} prompts")
+    
+    socketio.emit('transcription_result', result, room=sid)
+    
+    for prompt_info in result.get('prompts', []):
+        agent_type = prompt_info.get('agent')
+        prompt = prompt_info.get('prompt', '')
+        
+        if agent_type == 'browser':
+            browser_agent.process(prompt)
+        elif agent_type == 'ide':
+            ide_agent.process(prompt)
 
 def on_xai_message(ws, message, sid):
     if not message:
         return
     try:
         data = json.loads(message)
-        print(f"Received from x.ai for SID {sid}:", json.dumps(data, indent=2))
+        msg_type = data.get('type', 'unknown')
+        print(f"[x.ai → backend] type={msg_type}, sid={sid[:8]}")
         
         # Track speech state
         if data.get('type') == 'input_audio_buffer.speech_started':
@@ -40,12 +66,28 @@ def on_xai_message(ws, message, sid):
         elif data.get('type') == 'input_audio_buffer.speech_stopped':
             speech_active[sid] = False
         
+        # Handle final transcription - process with orchestrator
+        if data.get('type') == 'conversation.item.created':
+            item = data.get('item', {})
+            if item.get('type') == 'message' and item.get('role') == 'user':
+                content = item.get('content', [])
+                for c in content:
+                    if c.get('type') == 'input_audio' and c.get('transcript'):
+                        transcript = c.get('transcript')
+                        process_with_orchestrator(transcript, sid)
+        
+        # Also handle input_audio_transcription.completed
+        if data.get('type') == 'conversation.item.input_audio_transcription.completed':
+            transcript = data.get('transcript')
+            if transcript:
+                process_with_orchestrator(transcript, sid)
+        
         socketio.emit('transcription_update', data, room=sid)
     except json.JSONDecodeError:
-        print(f"Non-JSON message from x.ai for SID {sid}: {message[:100]}")
+        print(f"[x.ai → backend] non-json message, sid={sid[:8]}, len={len(message)}")
 
 def on_xai_open(ws):
-    print("Connected to x.ai server.")
+    print("[x.ai] Connected to x.ai server.")
     session_config = {
         "type": "session.update",
         "session": {
@@ -66,9 +108,9 @@ def handle_xai_messages(ws, sid):
             message = ws.recv()
             on_xai_message(ws, message, sid)
     except WebSocketConnectionClosedException:
-        print(f"x.ai connection for SID {sid} closed normally.")
+        print(f"[x.ai] Connection closed normally, sid={sid[:8]}")
     except Exception as e:
-        print(f"Error in x.ai message handler for SID {sid}: {e}")
+        print(f"[x.ai] Error in message handler, sid={sid[:8]}: {e}")
     finally:
         if sid in xai_connections:
             try:
@@ -81,16 +123,16 @@ def handle_xai_messages(ws, sid):
 @socketio.on('connect')
 def connect():
     sid = request.sid  # type: ignore
-    print(f'Client connected: {sid}')
+    print(f'[socketio] Client connected, sid={sid[:8]}')
     join_room(sid) # Each client gets their own room named after their sid
     emit('my response', {'data': f'Connected. Send start_transcription_stream to begin.'}, room=sid)
 
 @socketio.on('disconnect')
 def disconnect():
     sid = request.sid  # type: ignore
-    print(f'Client disconnected: {sid}')
+    print(f'[socketio] Client disconnected, sid={sid[:8]}')
     if sid in xai_connections:
-        print(f"Closing x.ai connection for SID {sid} due to client disconnect.")
+        print(f"[x.ai] Closing connection due to client disconnect, sid={sid[:8]}")
         try:
             xai_connections[sid].close()
             del xai_connections[sid]
@@ -102,7 +144,7 @@ def disconnect():
 @socketio.on('start_transcription_stream')
 def start_transcription_stream():
     sid = request.sid  # type: ignore
-    print(f"Client {sid} requested to start transcription stream.")
+    print(f"[socketio] start_transcription_stream, sid={sid[:8]}")
     if not XAI_API_KEY:
         emit('error', {'message': 'XAI_API_KEY not configured on server.'}, room=sid)
         return
@@ -121,7 +163,7 @@ def start_transcription_stream():
             socketio.emit('transcription_started', {'message': 'Connected to x.ai and ready for audio.'}, room=sid)
             handle_xai_messages(ws, sid)
         except Exception as e:
-            print(f"Failed to connect to x.ai for SID {sid}: {e}")
+            print(f"[x.ai] Failed to connect, sid={sid[:8]}: {e}")
             socketio.emit('error', {'message': f'Failed to connect to x.ai: {e}'}, room=sid)
             if sid in xai_connections:
                 del xai_connections[sid]
@@ -140,9 +182,9 @@ def handle_audio_chunk(data):
                 "audio": audio_base64
             }
             ws.send(json.dumps(audio_event))
-            print(f"Sent {len(data)} bytes of audio for SID {sid}")
+            print(f"[frontend → x.ai] audio chunk, size={len(data)} bytes, sid={sid[:8]}")
         except Exception as e:
-            print(f"Error sending audio chunk for SID {sid}: {e}")
+            print(f"[backend] Error sending audio chunk, sid={sid[:8]}: {e}")
 
 @socketio.on('commit_audio')
 def commit_audio():
@@ -154,14 +196,14 @@ def commit_audio():
                 "type": "input_audio_buffer.commit"
             }
             ws.send(json.dumps(commit_event))
-            print(f"Committed audio buffer for SID {sid}")
+            print(f"[frontend → x.ai] audio committed, sid={sid[:8]}")
         except Exception as e:
-            print(f"Error committing audio for SID {sid}: {e}")
+            print(f"[backend] Error committing audio, sid={sid[:8]}: {e}")
 
 @socketio.on('stop_transcription_stream')
 def stop_transcription_stream():
     sid = request.sid  # type: ignore
-    print(f"Client {sid} requested to stop transcription stream.")
+    print(f"[socketio] stop_transcription_stream, sid={sid[:8]}")
     if sid in xai_connections:
         try:
             xai_connections[sid].close()

@@ -88,3 +88,42 @@ button {
   font-style: italic;
   color: #aaa;
 }
+
+.prompts-container {
+  max-width: 800px;
+  margin: 20px;
+  padding: 20px;
+  background-color: rgba(255, 193, 7, 0.1);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.prompts-container h3 {
+  color: #ffc107;
+  margin-top: 0;
+}
+
+.prompt-card {
+  margin: 15px 0;
+  padding: 15px;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.agent-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  background-color: #ffc107;
+  color: #282c34;
+  border-radius: 15px;
+  font-size: 14px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+.prompt-text {
+  margin: 0;
+  color: #e0e0e0;
+  font-size: 16px;
+}
