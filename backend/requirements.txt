@@ -11,3 +11,4 @@ pydub
 gevent
 greenlet
 gunicorn
+camel-ai
