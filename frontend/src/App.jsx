@@ -8,14 +8,14 @@ function App() {
   const [micEnabled, setMicEnabled] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
-  const [transcriptionSegments, setTranscriptionSegments] = useState([]);
+  const [conversationItems, setConversationItems] = useState([]);
   const [prompts, setPrompts] = useState([]);
   const [error, setError] = useState('');
 
   const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
   const socketRef = useRef(null);
-  const transcriptionEndRef = useRef(null);
+  const conversationEndRef = useRef(null);
 
   useEffect(() => {
     if (!socketRef.current) {
@@ -49,14 +49,24 @@ function App() {
     socketRef.current.on('transcription_update', (data) => {
       if (data.type === 'transcript' && data.text) {
         console.log('[socket] Live transcript:', data.text);
-        setTranscriptionSegments(prev => [...prev, data.text]);
+        setConversationItems(prev => {
+          if (prev.length > 0 && prev[prev.length - 1].type === 'user' && prev[prev.length - 1].text === data.text) {
+            return prev;
+          }
+          return [...prev, { type: 'user', text: data.text }];
+        });
       }
     });
 
     socketRef.current.on('transcription_result', (data) => {
       console.log('[socket] Transcription result:', data);
       if (data.original_text) {
-        setTranscriptionSegments(prev => [...prev, data.original_text]);
+        setConversationItems(prev => {
+          if (prev.length > 0 && prev[prev.length - 1].type === 'user' && prev[prev.length - 1].text === data.original_text) {
+            return prev;
+          }
+          return [...prev, { type: 'user', text: data.original_text }];
+        });
       }
       if (data.prompts?.length > 0) {
         setPrompts(data.prompts);
@@ -69,6 +79,10 @@ function App() {
 
     socketRef.current.on('browser_result', (data) => {
       console.log('[socket] Browser result:', data);
+      if (data.result) {
+        const responseText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2);
+        setConversationItems(prev => [...prev, { type: 'agent', agent: 'browser', text: responseText }]);
+      }
     });
 
     socketRef.current.on('transcription_stopped', () => {
@@ -91,10 +105,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (transcriptionEndRef.current) {
-      transcriptionEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (conversationEndRef.current) {
+      conversationEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [transcriptionSegments]);
+  }, [conversationItems]);
 
   const toggleMic = async () => {
     if (micEnabled) {
@@ -213,17 +227,20 @@ function App() {
         <div className="terminal-body">
           {error && <p className="error">{error}</p>}
           
-          {transcriptionSegments.length === 0 && status === 'idle' && !error && (
+          {conversationItems.length === 0 && status === 'idle' && !error && (
             <p className="hint">Click the microphone to start listening</p>
           )}
 
-          {transcriptionSegments.map((text, index) => (
-            <div key={index} className="transcription-line">
+          {conversationItems.map((item, index) => (
+            <div key={index} className={`conversation-line ${item.type}`}>
               <span className="line-number">{index + 1}</span>
-              <span className="transcription-text">{text}</span>
+              {item.type === 'agent' && (
+                <span className="agent-badge">{item.agent}</span>
+              )}
+              <span className={`conversation-text ${item.type}`}>{item.text}</span>
             </div>
           ))}
-          <div ref={transcriptionEndRef} />
+          <div ref={conversationEndRef} />
         </div>
       </main>
 

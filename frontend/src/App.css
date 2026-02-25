@@ -153,6 +153,19 @@ body {
   line-height: 1.5;
 }
 
+.conversation-line {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+  line-height: 1.5;
+  align-items: flex-start;
+}
+
+.conversation-line.agent {
+  flex-direction: column;
+  gap: 4px;
+}
+
 .line-number {
   color: #444;
   font-size: 12px;
@@ -168,10 +181,18 @@ body {
   padding: 40px;
 }
 
-.transcription-text {
+.conversation-text {
   font-size: 14px;
-  color: #00ff00;
   word-break: break-word;
+}
+
+.conversation-text.user {
+  color: #00ff00;
+}
+
+.conversation-text.agent {
+  color: #00bfff;
+  font-size: 13px;
 }
 
 .error {
