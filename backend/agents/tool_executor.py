@@ -10,7 +10,7 @@ XAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 GROK_MODEL_CONFIG = {
     "model_platform": ModelPlatformType.OPENAI_COMPATIBLE_MODEL,
-    "model_type": "grok-3-mini",
+    "model_type": "grok-4-1-fast-non-reasoning",
     "url": "https://api.x.ai/v1",
     "api_key": XAI_API_KEY,
 }

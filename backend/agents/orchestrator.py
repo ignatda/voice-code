@@ -34,6 +34,7 @@ Rules:
 - Always preserve the original transcribed text exactly
 - Make prompts specific and actionable
 - Use English for prompts regardless of the input language
+- Output only valid JSON, no additional text
 """
 
 
@@ -43,14 +44,10 @@ class OrchestratorAgent:
             api_key=XAI_API_KEY,
             base_url="https://api.x.ai/v1"
         )
-        self.model = "grok-3-mini"
+        self.model = "grok-4-1-fast-non-reasoning"
 
     def process(self, transcription: str) -> Dict[str, Any]:
-        prompt = f"""Analyze this transcribed speech and output JSON with agent prompts:
-
-Transcription: {transcription}
-
-Output only valid JSON, no additional text:"""
+        prompt = f"""Analyze this transcribed speech and output JSON with agent prompts: {transcription}"""
 
         try:
             response = self.client.chat.completions.create(
@@ -61,12 +58,12 @@ Output only valid JSON, no additional text:"""
                 ],
                 temperature=0.0,
             )
-            
+
             content = response.choices[0].message.content
             if content is None:
                 raise ValueError("Empty response from model")
             result = json.loads(content)
-            
+
             return {
                 "original_text": transcription,
                 "prompts": result.get("prompts", [])

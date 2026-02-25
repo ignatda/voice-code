@@ -325,5 +325,19 @@ def stop_transcription_stream():
     if sid in status_map:
         del status_map[sid]
 
+def graceful_shutdown(sig, frame):
+    log("Shutting down, closing all x.ai connections...")
+    for sid, ws in list(xai_connections.items()):
+        try:
+            ws.close()
+        except:
+            pass
+    xai_connections.clear()
+    import sys
+    sys.exit(0)
+
 if __name__ == '__main__':
+    import signal
+    signal.signal(signal.SIGINT, graceful_shutdown)
+    signal.signal(signal.SIGTERM, graceful_shutdown)
     socketio.run(app, host='0.0.0.0', port=5000, debug=False, allow_unsafe_werkzeug=True)
