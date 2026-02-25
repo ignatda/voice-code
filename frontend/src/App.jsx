@@ -15,6 +15,7 @@ function App() {
   const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
   const socketRef = useRef(null);
+  const transcriptionEndRef = useRef(null);
 
   useEffect(() => {
     if (!socketRef.current) {
@@ -88,6 +89,12 @@ function App() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (transcriptionEndRef.current) {
+      transcriptionEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [transcriptionSegments]);
 
   const toggleMic = async () => {
     if (micEnabled) {
@@ -203,17 +210,21 @@ function App() {
       </header>
 
       <main className="content">
-        {error && <p className="error">{error}</p>}
-        
-        {transcriptionSegments.length === 0 && status === 'idle' && !error && (
-          <p className="hint">Click the microphone to start listening</p>
-        )}
+        <div className="terminal-body">
+          {error && <p className="error">{error}</p>}
+          
+          {transcriptionSegments.length === 0 && status === 'idle' && !error && (
+            <p className="hint">Click the microphone to start listening</p>
+          )}
 
-        {transcriptionSegments.map((text, index) => (
-          <div key={index} className="transcription-text">
-            {text}
-          </div>
-        ))}
+          {transcriptionSegments.map((text, index) => (
+            <div key={index} className="transcription-line">
+              <span className="line-number">{index + 1}</span>
+              <span className="transcription-text">{text}</span>
+            </div>
+          ))}
+          <div ref={transcriptionEndRef} />
+        </div>
       </main>
 
       <footer className="command-panel">

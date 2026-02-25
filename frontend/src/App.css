@@ -115,32 +115,70 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 40px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.terminal-body {
+  flex: 1;
+  padding: 16px;
   overflow-y: auto;
+  background-color: #0d0d0d;
+  border-radius: 8px;
+  border: 1px solid #333;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
+}
+
+.terminal-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.terminal-body::-webkit-scrollbar-track {
+  background: #0d0d0d;
+}
+
+.terminal-body::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.terminal-body::-webkit-scrollbar-thumb:hover {
+  background: #444;
+}
+
+.transcription-line {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.line-number {
+  color: #444;
+  font-size: 12px;
+  min-width: 24px;
+  text-align: right;
+  user-select: none;
 }
 
 .hint {
   color: #555;
-  font-size: 18px;
+  font-size: 14px;
+  text-align: center;
+  padding: 40px;
 }
 
 .transcription-text {
-  font-size: 32px;
-  color: #fff;
-  text-align: center;
-  margin: 20px 0;
-  max-width: 800px;
-  line-height: 1.4;
+  font-size: 14px;
+  color: #00ff00;
+  word-break: break-word;
 }
 
 .error {
-  color: #f44336;
-  margin: 10px;
-  padding: 10px 20px;
-  background-color: rgba(244, 67, 54, 0.1);
-  border-radius: 8px;
+  color: #ff5f56;
+  font-size: 13px;
+  margin-bottom: 12px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
 }
 
 .command-panel {
