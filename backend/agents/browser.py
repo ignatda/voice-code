@@ -40,6 +40,7 @@ class BrowserAgent:
     
     def ensure_browser_open(self):
         if not self.is_open:
+            print("[browser_agent] Opening browser...")
             self.toolkit = HybridBrowserToolkit(
                 headless=False,
                 browser_log_to_file=True
@@ -48,6 +49,8 @@ class BrowserAgent:
             self.executor = ToolExecutorAgent(self.toolkit)
             self.is_open = True
             print("[browser_agent] Browser opened")
+        else:
+            print("[browser_agent] Browser already open")
     
     def close_browser(self) -> Dict[str, Any]:
         if self.is_open and self.toolkit:
@@ -80,8 +83,13 @@ class BrowserAgent:
         
         # Execute the command
         if self.executor:
+            print(f"[browser_agent] Executing command: {prompt}")
             result = self._run_async(self.executor.execute(prompt))
             print(f"[browser_agent] Result: {result}")
             return result
-        
-        return {"status": "error", "message": "Executor not initialized"}
+        else:
+            print("[browser_agent] Executor not initialized, opening browser first")
+            self.ensure_browser_open()
+            result = self._run_async(self.executor.execute(prompt))
+            print(f"[browser_agent] Result: {result}")
+            return result

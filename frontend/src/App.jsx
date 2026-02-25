@@ -1,140 +1,105 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5000';
 
 function App() {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [micEnabled, setMicEnabled] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [status, setStatus] = useState('idle');
   const [transcriptionSegments, setTranscriptionSegments] = useState([]);
-  const [currentTranscription, setCurrentTranscription] = useState('');
   const [prompts, setPrompts] = useState([]);
   const [error, setError] = useState('');
 
-  const mediaRecorderRef = useRef(null);
+  const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
   const socketRef = useRef(null);
 
-  // Callback to handle transcription updates
-  const handleTranscriptionUpdate = useCallback((data) => {
-    // Handle conversation item created (final transcription)
-    if (data.type === 'conversation.item.created') {
-      const item = data.item;
-      if (item.type === 'message' && item.role === 'user') {
-        const content = item.content?.[0];
-        if (content?.type === 'input_audio' && content.transcript) {
-          console.log(`[transcription] Final transcript received, length=${content.transcript.length}`);
-          setTranscriptionSegments(prev => [...prev, content.transcript]);
-          setCurrentTranscription('');
-          setIsSpeaking(false);
-        }
-      }
-    }
-    // Handle input audio transcription completed
-    else if (data.type === 'conversation.item.input_audio_transcription.completed') {
-      const transcript = data.transcript;
-      if (transcript) {
-        console.log(`[transcription] Transcription completed, length=${transcript.length}`);
-        setTranscriptionSegments(prev => [...prev, transcript]);
-        setCurrentTranscription('');
-        setIsSpeaking(false);
-      }
-    }
-    // Handle speech detection
-    else if (data.type === 'input_audio_buffer.speech_started') {
-      console.log('[transcription] Speech started');
-      setIsSpeaking(true);
-      setCurrentTranscription('...');
-    }
-    else if (data.type === 'input_audio_buffer.speech_stopped') {
-      console.log('[transcription] Speech stopped');
-      setIsSpeaking(false);
-    }
-  }, []);
-
   useEffect(() => {
-    if (!socketRef.current) { // Ensure socket is only initialized once
+    if (!socketRef.current) {
       socketRef.current = io(SOCKET_SERVER_URL, {
         transports: ['websocket'],
       });
-
-      socketRef.current.on('connect', () => {
-        console.log('[socket] Connected to backend');
-        setIsConnected(true); // Update connection status
-        setError('');
-      });
-
-      socketRef.current.on('transcription_update', handleTranscriptionUpdate);
-
-      socketRef.current.on('transcription_started', () => {
-        console.log('[socket] Transcription stream started');
-        setIsTranscribing(true);
-        setError('');
-        setTranscriptionSegments([]);
-        setCurrentTranscription('');
-        setPrompts([]);
-      });
-
-      socketRef.current.on('transcription_stopped', () => {
-        console.log('[socket] Transcription stream stopped');
-        setIsTranscribing(false);
-        setCurrentTranscription('');
-      });
-
-      socketRef.current.on('transcription_result', (data) => {
-        console.log('[socket] Transcription result received:', data);
-        setPrompts(data.prompts || []);
-      });
-
-      socketRef.current.on('error', (data) => {
-        console.error('[socket] Error:', data.message || data);
-        setError(data.message || 'An error occurred with the transcription service.');
-        setIsRecording(false);
-        setIsTranscribing(false);
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-        }
-        if (audioStreamRef.current) {
-          audioStreamRef.current.getTracks().forEach(track => track.stop());
-        }
-      });
-
-      socketRef.current.on('disconnect', () => {
-        console.log('[socket] Disconnected from backend');
-        setIsConnected(false); // Update connection status
-        setIsRecording(false);
-        setIsTranscribing(false);
-        setError('Disconnected from service.');
-        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-          mediaRecorderRef.current.stop();
-        }
-        if (audioStreamRef.current) {
-          audioStreamRef.current.getTracks().forEach(track => track.stop());
-        }
-      });
     }
 
+    socketRef.current.on('connect', () => {
+      console.log('[socket] Connected to backend');
+      setIsConnected(true);
+      setError('');
+    });
+
+    socketRef.current.on('disconnect', () => {
+      console.log('[socket] Disconnected from backend');
+      setIsConnected(false);
+      setMicEnabled(false);
+      setStatus('idle');
+    });
+
+    socketRef.current.on('status', (data) => {
+      console.log('[socket] Status:', data.status);
+      setStatus(data.status);
+    });
+
+    socketRef.current.on('transcription_started', () => {
+      console.log('[socket] Transcription stream started');
+    });
+
+    socketRef.current.on('transcription_update', (data) => {
+      if (data.type === 'transcript' && data.text) {
+        console.log('[socket] Live transcript:', data.text);
+        setTranscriptionSegments(prev => [...prev, data.text]);
+      }
+    });
+
+    socketRef.current.on('transcription_result', (data) => {
+      console.log('[socket] Transcription result:', data);
+      if (data.original_text) {
+        setTranscriptionSegments(prev => [...prev, data.original_text]);
+      }
+      if (data.prompts?.length > 0) {
+        setPrompts(data.prompts);
+      }
+    });
+
+    socketRef.current.on('ready_for_audio', () => {
+      console.log('[socket] Ready for audio');
+    });
+
+    socketRef.current.on('browser_result', (data) => {
+      console.log('[socket] Browser result:', data);
+    });
+
+    socketRef.current.on('transcription_stopped', () => {
+      console.log('[socket] Transcription stopped');
+    });
+
+    socketRef.current.on('error', (data) => {
+      console.error('[socket] Error:', data.message);
+      setError(data.message);
+      setMicEnabled(false);
+      setStatus('idle');
+    });
+
     return () => {
-      if (socketRef.current && isConnected) {
-        socketRef.current.off('transcription_update', handleTranscriptionUpdate);
+      if (socketRef.current) {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(track => track.stop());
-      }
     };
-  }, [handleTranscriptionUpdate, isConnected]); // Add isConnected to dependency array
+  }, []);
 
-  const startRecording = async () => {
+  const toggleMic = async () => {
+    if (micEnabled) {
+      disableMic();
+    } else {
+      enableMic();
+    }
+  };
+
+  const enableMic = async () => {
     if (!socketRef.current || !isConnected) {
-      setError('Not connected to the transcription service.');
+      setError('Not connected to the service.');
       return;
     }
 
@@ -143,147 +108,127 @@ function App() {
         audio: {
           sampleRate: 24000,
           channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true
+          echoCancellation: false,
+          noiseSuppression: false
         }
       });
       audioStreamRef.current = stream;
 
       socketRef.current.emit('start_transcription_stream');
 
-      socketRef.current.once('transcription_started', () => {
-        setIsRecording(true);
+      socketRef.current.once('transcription_started', async () => {
+        setMicEnabled(true);
         setError('');
 
         const audioContext = new AudioContext({ sampleRate: 24000 });
         const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-        let silenceFrames = 0;
-        const SILENCE_THRESHOLD = 0.01;
-        const SILENCE_FRAMES_BEFORE_COMMIT = 8;
-        let isSilent = false;
-
-        processor.onaudioprocess = (e) => {
-          const inputData = e.inputBuffer.getChannelData(0);
-          const pcm16 = new Int16Array(inputData.length);
-
-          let sum = 0;
-          for (let i = 0; i < inputData.length; i++) {
-            pcm16[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
-            sum += inputData[i] * inputData[i];
-          }
-          const rms = Math.sqrt(sum / inputData.length);
-
-          if (rms < SILENCE_THRESHOLD) {
-            silenceFrames++;
-            if (silenceFrames === SILENCE_FRAMES_BEFORE_COMMIT && !isSilent) {
-              socketRef.current.emit('commit_audio');
-              isSilent = true;
-            }
-          } else {
-            if (isSilent) {
-              isSilent = false;
-            }
-            silenceFrames = 0;
-            socketRef.current.emit('audio_chunk', pcm16.buffer);
+        
+        await audioContext.audioWorklet.addModule('/AudioProcessorWorklet.js');
+        
+        const workletNode = new AudioWorkletNode(audioContext, 'noise-cancelling-processor');
+        
+        workletNode.port.onmessage = (event) => {
+          if (event.data.type === 'audio') {
+            socketRef.current.emit('audio_chunk', event.data.data);
           }
         };
-
-        source.connect(processor);
-        processor.connect(audioContext.destination);
-        mediaRecorderRef.current = { audioContext, processor, source };
-      });
-
-      socketRef.current.once('error', (data) => {
-        console.error('[recording] Error during transcription stream:', data);
-        setError(data.message || 'Failed to start transcription stream.');
-        setIsRecording(false);
-        setIsTranscribing(false);
-        if (audioStreamRef.current) {
-          audioStreamRef.current.getTracks().forEach(track => track.stop());
-        }
+        
+        source.connect(workletNode);
+        workletNode.connect(audioContext.destination);
+        
+        audioContextRef.current = { audioContext, workletNode, source };
       });
 
     } catch (err) {
-      setError('Error accessing microphone. Please grant permission.');
-      console.error('[recording] Microphone error:', err);
+      setError('Error accessing microphone.');
+      console.error('[mic] Error:', err);
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      const { audioContext, processor, source } = mediaRecorderRef.current;
-      if (processor) processor.disconnect();
+  const disableMic = () => {
+    if (audioContextRef.current) {
+      const { audioContext, workletNode, source } = audioContextRef.current;
+      if (workletNode) workletNode.disconnect();
       if (source) source.disconnect();
       if (audioContext) audioContext.close();
+      audioContextRef.current = null;
     }
     if (audioStreamRef.current) {
       audioStreamRef.current.getTracks().forEach(track => track.stop());
     }
-    setIsRecording(false);
+    setMicEnabled(false);
+    setStatus('idle');
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit('stop_transcription_stream');
     }
   };
 
-  const handleToggleRecording = () => {
-    if (isRecording) {
-      stopRecording();
-    } else {
-      startRecording();
+  const getStatusText = () => {
+    switch (status) {
+      case 'listening': return 'Listening';
+      case 'speaking': return 'Speaking';
+      case 'preparing': return 'Processing';
+      case 'executing': return 'Executing';
+      default: return 'Idle';
     }
   };
 
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>Real-time Voice to Text (Grok)</h1>
-        {isRecording && (
-          <div className="mic-indicator">
-            <svg
-              className={`mic-icon ${isSpeaking ? 'speaking' : ''}`}
-              viewBox="0 0 24 24"
-              width="48"
-              height="48"
-            >
+      <header className="top-bar">
+        <div className="status-indicator">
+          <span className={`status-dot ${status}`}></span>
+          <span className="status-label">{getStatusText()}</span>
+        </div>
+
+        <button
+          className={`mic-toggle ${micEnabled ? 'enabled' : ''}`}
+          onClick={toggleMic}
+          disabled={!isConnected}
+          title={micEnabled ? 'Disable microphone' : 'Enable microphone'}
+        >
+          {micEnabled ? (
+            <svg viewBox="0 0 24 24" width="28" height="28">
               <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
               <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
             </svg>
-            <span className="recording-text">{isSpeaking ? 'Speaking...' : 'Listening...'}</span>
-          </div>
-        )}
-        <button
-          onClick={handleToggleRecording}
-          disabled={!isConnected || (isRecording && !isTranscribing)}
-        >
-          {isRecording ? 'Stop Recording' : 'Start Recording'}
-        </button>
-        {error && <p className="error">{error}</p>}
-        <div className="transcription-container">
-          {transcriptionSegments.map((text, index) => (
-            <p key={index} className="transcription-segment">{text}</p>
-          ))}
-          {currentTranscription && (
-            <p className="current-transcription">{currentTranscription}<span>_</span></p>
+          ) : (
+            <svg viewBox="0 0 24 24" width="28" height="28">
+              <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+              <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
           )}
-          {!isRecording && transcriptionSegments.length === 0 && !currentTranscription && <p>Click "Start Recording" and speak.</p>}
-          {isRecording && !isTranscribing && <p>Connecting to transcription service...</p>}
-          {isRecording && isTranscribing && !currentTranscription && transcriptionSegments.length === 0 && <p>Listening...</p>}
-        </div>
-        
-        {prompts.length > 0 && (
-          <div className="prompts-container">
-            <h3>Agent Prompts</h3>
-            {prompts.map((prompt, index) => (
-              <div key={index} className="prompt-card">
-                <span className="agent-badge">{prompt.agent}</span>
-                <p className="prompt-text">{prompt.prompt}</p>
-              </div>
-            ))}
-          </div>
-        )}
+        </button>
       </header>
+
+      <main className="content">
+        {error && <p className="error">{error}</p>}
+        
+        {transcriptionSegments.length === 0 && status === 'idle' && !error && (
+          <p className="hint">Click the microphone to start listening</p>
+        )}
+
+        {transcriptionSegments.map((text, index) => (
+          <div key={index} className="transcription-text">
+            {text}
+          </div>
+        ))}
+      </main>
+
+      <footer className="command-panel">
+        <div className="command-list">
+          {prompts.map((prompt, index) => (
+            <div key={index} className="command-item">
+              <span className="agent-badge">{prompt.agent}</span>
+              <span className="command-text">{prompt.prompt}</span>
+            </div>
+          ))}
+          {prompts.length === 0 && (
+            <span className="no-commands">No commands yet</span>
+          )}
+        </div>
+      </footer>
     </div>
   );
 }
