@@ -9,6 +9,24 @@ const getXAIConfig = () => ({
   model: process.env.OPENAI_MODEL || 'grok-4-1-fast-non-reasoning',
 });
 
+const CLI_TOOLS: Record<string, { bin: string; run: string; continueFlag: string }> = {
+  opencode: {
+    bin: '/home/dsherstobitov/.opencode/bin/opencode',
+    run: 'run',
+    continueFlag: '-c',
+  },
+  'kiro-cli': {
+    bin: '/home/dsherstobitov/.local/bin/kiro-cli',
+    run: 'chat --no-interactive --trust-all-tools',
+    continueFlag: '--resume',
+  },
+};
+
+const getCliTool = () => {
+  const name = process.env.CODING_CLI || 'opencode';
+  return CLI_TOOLS[name] || CLI_TOOLS['opencode'];
+};
+
 const JETBRAINS_MCP_CONFIG = {
   command: '/snap/intellij-idea-ultimate/730/jbr/bin/java',
   args: [
@@ -22,7 +40,9 @@ const JETBRAINS_MCP_CONFIG = {
   timeout: 60000
 };
 
-const JETBRAINS_AGENT_INSTRUCTIONS = `You are an IDE control agent for IntelliJ IDEA.
+const getJetBrainsInstructions = () => {
+  const cli = getCliTool();
+  return `You are an IDE control agent for IntelliJ IDEA.
 
 You have access to JetBrains IDE tools via MCP. You act as a dispatcher that simulates human hands.
 
@@ -37,25 +57,26 @@ You have access to JetBrains IDE tools via MCP. You act as a dispatcher that sim
 - Any IDE UI action
 
 ### 2. Coding tasks (delegate to AI CLI in terminal):
-For ANY code writing, editing, refactoring, or generation task, use the execute_terminal_command tool to run opencode in non-interactive mode.
+For ANY code writing, editing, refactoring, or generation task, use the execute_terminal_command tool to run the coding CLI.
 
 First coding command in a conversation:
-\`/home/dsherstobitov/.opencode/bin/opencode run "<detailed coding instruction>"\`
+\`${cli.bin} ${cli.run} "<detailed coding instruction>"\`
 
 All subsequent coding commands (to keep context of previous changes):
-\`/home/dsherstobitov/.opencode/bin/opencode run -c "<follow-up instruction>"\`
+\`${cli.bin} ${cli.run} ${cli.continueFlag} "<follow-up instruction>"\`
 
 IMPORTANT: Always use execute_terminal_command with these parameters:
-- command: the opencode command above
+- command: the CLI command above
 - executeInShell: true
 - timeout: 120000
 
 ## RULES:
-- NEVER write or edit code yourself. Always delegate coding to opencode.
+- NEVER write or edit code yourself. Always delegate coding to the CLI.
 - NEVER ask clarifying questions. Use available tools to discover information.
-- For coding tasks, pass the full detailed prompt to opencode.
+- For coding tasks, pass the full detailed prompt to the CLI.
 - For IDE navigation/reading tasks, use MCP tools directly.
-- Use -c on every coding command EXCEPT the very first one in a conversation.`;
+- Use ${cli.continueFlag} on every coding command EXCEPT the very first one in a conversation.`;
+};
 
 let mcpServer: MCPServerStdio | null = null;
 let jetbrainsAgent: Agent | null = null;
@@ -96,7 +117,7 @@ async function getAgent(): Promise<Agent> {
   if (!jetbrainsAgent) {
     jetbrainsAgent = new Agent({
       name: 'JetBrains Agent',
-      instructions: JETBRAINS_AGENT_INSTRUCTIONS,
+      instructions: getJetBrainsInstructions(),
       mcpServers: [mcpServer],
       model: getXAIConfig().model
     });
@@ -126,9 +147,10 @@ export class JetBrainsAgent {
   }
 
   async process(prompt: string): Promise<JetBrainsResult> {
+    const cli = getCliTool();
     const sessionHint = this.hasActiveSession
-      ? '\n[CONTEXT: An opencode session already exists. Use -c flag for any coding commands.]'
-      : '\n[CONTEXT: No opencode session yet. Do NOT use -c for the first coding command.]';
+      ? `\n[CONTEXT: A coding CLI session already exists. Use ${cli.continueFlag} flag for any coding commands.]`
+      : '\n[CONTEXT: No coding CLI session yet. Do NOT use the continue flag for the first coding command.]';
     const augmentedPrompt = prompt + sessionHint;
 
     console.log(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);

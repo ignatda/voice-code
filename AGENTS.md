@@ -15,16 +15,32 @@ The system uses a multi-agent architecture powered by the **OpenAI Agents SDK** 
 
 1. **Orchestrator Agent** — Analyzes transcribed speech, translates to English, and routes commands to specialized agents via the OpenAI `chat.completions` API.
 2. **Browser Agent** — Controls a Chromium browser via Playwright MCP server. Uses the OpenAI Agents SDK with `useResponses: false` (Chat Completions mode) against the Grok API.
-3. **IDE Agent** — Controls IntelliJ IDEA via JetBrains MCP server. Same SDK configuration as the Browser Agent.
-4. **x.ai Realtime API** — Handles voice input/output via WebSocket (PCM16 audio at 16kHz mono).
+3. **JetBrains Agent** — Controls IntelliJ IDEA via JetBrains MCP server. Acts as a dispatcher: handles direct IDE actions (navigate, search, open files) via MCP tools, and delegates coding tasks to an external AI CLI (opencode or kiro-cli) via `execute_terminal_command`.
+4. **x.ai Realtime API** — Handles voice input/output via WebSocket (PCM16 audio at 24kHz mono).
+
+### JetBrains Agent Dispatch Flow
+
+```
+Voice → Transcribe → Orchestrator → JetBrains Agent (Grok)
+                                          ↓
+                                    Decides action type
+                                          ↓
+                          ┌───────────────┴───────────────┐
+                          ↓                               ↓
+                   Direct IDE action              Coding task
+                   (MCP tools)                    (execute_terminal_command)
+                   e.g. open file,                → opencode run "..."
+                   search, navigate               → kiro-cli chat "..."
+```
 
 ## Technology Stack
 
 - **AI Framework**: OpenAI Agents SDK v0.7+ (`@openai/agents`) — configured with `useResponses: false` for Grok API compatibility
 - **LLM Provider**: Grok API (https://docs.x.ai)
     - API key configured via `OPENAI_API_KEY` in `.env`
-    - Base URL: `https://api.x.ai/v1`
+    - Base URL configured via `OPENAI_BASE_URL` in `.env`
     - Tracing disabled via `OPENAI_AGENTS_DISABLE_TRACING=1` (incompatible with Grok)
+- **Coding CLI**: Configurable via `CODING_CLI` env var — `opencode` (default) or `kiro-cli`
 - **Frontend**: React 19 with Vite
 - **Backend**: Node.js Express with Socket.IO, TypeScript
 - **Real-time Communication**: WebSocket (x.ai Realtime API)
@@ -81,7 +97,7 @@ docker-compose up --build
 
 **File Structure**:
 - Main application: `backend/src/index.ts`
-- Agents: `backend/src/agents/` (browser.ts, ide.ts, orchestrator.ts)
+- Agents: `backend/src/agents/` (browser.ts, jetbrains.ts, orchestrator.ts)
 - Types: `backend/src/types/`
 - Realtime client: `backend/src/xai-realtime.ts`
 
@@ -90,6 +106,8 @@ docker-compose up --build
 - Agent modules dynamically imported in `index.ts` after dotenv loads
 - `OpenAIProvider` configured with `useResponses: false` for Grok compatibility
 - MCP servers spawned with full `process.env` to inherit `DISPLAY` for headed browser mode
+- JetBrains agent tracks `hasActiveSession` to pass continue flags to the coding CLI
+- CLI tool config (`CLI_TOOLS`) maps tool name to binary path, run command, and continue flag
 
 **Imports**:
 ```typescript
@@ -116,19 +134,21 @@ import type { BrowserResult } from '../types';
 - Store secrets in `.env` (never commit)
 - Use `.env.example` for template
 - Access via `process.env` in Node.js, `import.meta.env` in Vite
+- `CODING_CLI` — switch between `opencode` and `kiro-cli`
 
 **Socket.IO Events**:
 - `transcription_result` — orchestrator output with agent prompts
 - `browser_result` — `{ status, message }` from browser agent
-- `ide_result` — result from IDE agent
+- `ide_result` — `{ agent, status, message }` from JetBrains agent
 - `audio_delta` — audio chunks from x.ai realtime API
 
 ## Important Notes
 
 1. **CORS**: Backend allows all origins for development
-2. **Audio Format**: Frontend converts microphone input to PCM16 (16kHz mono)
+2. **Audio Format**: Frontend converts microphone input to PCM16 (24kHz mono)
 3. **Grok API compatibility**: Must use Chat Completions mode (`useResponses: false`), not the OpenAI Responses API
 4. **Tracing**: Disabled via env var — the OpenAI Agents SDK tracing hits `platform.openai.com` which rejects Grok API keys
+5. **JetBrains agent does NOT write code** — it delegates coding to the configured CLI tool running in the IDE terminal
 
 ## Dependencies
 
