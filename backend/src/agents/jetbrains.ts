@@ -24,23 +24,38 @@ const JETBRAINS_MCP_CONFIG = {
 
 const JETBRAINS_AGENT_INSTRUCTIONS = `You are an IDE control agent for IntelliJ IDEA.
 
-You have access to JetBrains IDE tools via MCP. Use these tools to:
-- Read, create, and edit files in the project
-- Run terminal commands
-- Search for code patterns
-- Navigate the project structure
-- Execute code and tests
+You have access to JetBrains IDE tools via MCP. You act as a dispatcher that simulates human hands.
 
-When the user asks to do something with code, files, or the IDE:
-1. Analyze what needs to be done
-2. Use the appropriate tools to accomplish the task
-3. Report the results back to the user
+## Two modes of operation:
 
-IMPORTANT RULES:
-- NEVER ask clarifying questions. Always use available tools to discover information yourself.
-- If you need the project path, use tools to find it.
-- If a request is ambiguous, make your best judgment and proceed.
-- Always be precise with file paths and commands.`;
+### 1. Direct IDE actions (use MCP tools directly):
+- Open/close files
+- Navigate to symbols or lines
+- Search in project
+- Read file contents
+- Get project structure
+- Any IDE UI action
+
+### 2. Coding tasks (delegate to AI CLI in terminal):
+For ANY code writing, editing, refactoring, or generation task, use the execute_terminal_command tool to run opencode in non-interactive mode.
+
+First coding command in a conversation:
+\`/home/dsherstobitov/.opencode/bin/opencode run "<detailed coding instruction>"\`
+
+All subsequent coding commands (to keep context of previous changes):
+\`/home/dsherstobitov/.opencode/bin/opencode run -c "<follow-up instruction>"\`
+
+IMPORTANT: Always use execute_terminal_command with these parameters:
+- command: the opencode command above
+- executeInShell: true
+- timeout: 120000
+
+## RULES:
+- NEVER write or edit code yourself. Always delegate coding to opencode.
+- NEVER ask clarifying questions. Use available tools to discover information.
+- For coding tasks, pass the full detailed prompt to opencode.
+- For IDE navigation/reading tasks, use MCP tools directly.
+- Use -c on every coding command EXCEPT the very first one in a conversation.`;
 
 let mcpServer: MCPServerStdio | null = null;
 let jetbrainsAgent: Agent | null = null;
@@ -93,6 +108,7 @@ async function getAgent(): Promise<Agent> {
 export class JetBrainsAgent {
   private initialized: boolean = false;
   private initError: string | null = null;
+  private hasActiveSession: boolean = false;
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -110,7 +126,12 @@ export class JetBrainsAgent {
   }
 
   async process(prompt: string): Promise<JetBrainsResult> {
-    console.log(`[jetbrains_agent] Received prompt: ${prompt}`);
+    const sessionHint = this.hasActiveSession
+      ? '\n[CONTEXT: An opencode session already exists. Use -c flag for any coding commands.]'
+      : '\n[CONTEXT: No opencode session yet. Do NOT use -c for the first coding command.]';
+    const augmentedPrompt = prompt + sessionHint;
+
+    console.log(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);
 
     if (!this.initialized) {
       try {
@@ -127,8 +148,16 @@ export class JetBrainsAgent {
 
     try {
       const agent = await getAgent();
-      const result = await run(agent, prompt);
+      const result = await run(agent, augmentedPrompt);
       
+      const toolCalls = result.newItems
+        .filter((item: any) => item.type === 'tool_call_item')
+        .map((item: any) => item.rawItem?.name || 'unknown');
+      if (toolCalls.length > 0) {
+        console.log(`[jetbrains_agent] Tools used: ${toolCalls.join(', ')}`);
+      }
+
+      this.hasActiveSession = true;
       const message = result.finalOutput || 'Command executed successfully';
       console.log(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
 

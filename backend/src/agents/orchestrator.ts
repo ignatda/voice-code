@@ -24,8 +24,9 @@ Output format (JSON):
 
 Rules:
 - If the user mentions browsing, searching, opening a website, reading web content, watching videos, video playback, scrolling, clicking, closing tabs, or any web/navigation action → include browser agent
-- If the user mentions coding, files, IDE, running code, or project management → include jetbrains agent
-- If the speech is just conversational/greeting → prompts array can be empty
+- If the user mentions coding, files, IDE, running code, project management, code review, improvements, refactoring, analysis, or anything related to the codebase → include jetbrains agent
+- If the speech is just a greeting with no actionable request (e.g. "hello", "hi") → prompts array can be empty
+- When in doubt, route to jetbrains agent. Prefer generating a prompt over returning empty.
 - Always preserve the original transcribed text exactly
 - Make prompts specific and actionable
 - Use English for prompts regardless of the input language
