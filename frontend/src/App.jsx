@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { io } from 'socket.io-client';
+import MarkdownMessage from './MarkdownMessage';
 import './App.css';
 
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5000';
@@ -298,7 +299,11 @@ function App() {
               {item.type === 'agent' && (
                 <span className="agent-badge">{item.agent}</span>
               )}
-              <span className={`conversation-text ${item.type}`}>{item.text}</span>
+              {item.type === 'agent' ? (
+                <MarkdownMessage text={item.text} />
+              ) : (
+                <span className={`conversation-text ${item.type}`}>{item.text}</span>
+              )}
             </div>
           ))}
           <div ref={conversationEndRef} />

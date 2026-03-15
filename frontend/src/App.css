@@ -308,12 +308,9 @@ body {
   background-color: rgba(255, 152, 0, 0.1);
 }
 
-/* Read-only mode: disable text selection & editing in content */
+/* Read-only mode: visual indicator */
 .App.read-only .terminal-body {
-  user-select: none;
-  pointer-events: none;
-  opacity: 0.7;
-  cursor: not-allowed;
+  border-color: #ff9800;
 }
 
 .App.read-only .content {
@@ -338,4 +335,99 @@ body {
   color: #ff9800;
   border: 1px solid #ff9800;
   border-radius: 4px;
+}
+
+/* Markdown body styling */
+.markdown-body {
+  color: #00bfff;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+  width: 100%;
+}
+
+.markdown-body p {
+  margin: 4px 0;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3,
+.markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  color: #e0e0e0;
+  margin: 12px 0 6px;
+  font-weight: 600;
+}
+
+.markdown-body h1 { font-size: 1.4em; }
+.markdown-body h2 { font-size: 1.2em; }
+.markdown-body h3 { font-size: 1.1em; }
+
+.markdown-body ul, .markdown-body ol {
+  padding-left: 20px;
+  margin: 4px 0;
+}
+
+.markdown-body li {
+  margin: 2px 0;
+}
+
+.markdown-body blockquote {
+  border-left: 3px solid #444;
+  padding-left: 12px;
+  color: #999;
+  margin: 8px 0;
+}
+
+.markdown-body a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.markdown-body a:hover {
+  text-decoration: underline;
+}
+
+.inline-code {
+  background-color: rgba(255, 255, 255, 0.08);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+  font-size: 13px;
+  color: #e6db74;
+}
+
+.markdown-body pre {
+  margin: 8px 0;
+  border-radius: 6px;
+  overflow-x: auto;
+}
+
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.markdown-body th, .markdown-body td {
+  border: 1px solid #333;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.markdown-body th {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #e0e0e0;
+}
+
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid #333;
+  margin: 12px 0;
+}
+
+.markdown-body strong {
+  color: #e0e0e0;
+}
+
+.markdown-body em {
+  color: #b0b0b0;
 }
