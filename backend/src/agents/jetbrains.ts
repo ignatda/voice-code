@@ -1,6 +1,6 @@
 import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/agents';
 import { MCPServerStdio } from '@openai/agents';
-import type { IDEResult } from '../types/index';
+import type { JetBrainsResult } from '../types';
 
 // Read env vars lazily to ensure dotenv has loaded
 const getXAIConfig = () => ({
@@ -22,7 +22,7 @@ const JETBRAINS_MCP_CONFIG = {
   timeout: 60000
 };
 
-const IDE_AGENT_INSTRUCTIONS = `You are an IDE control agent for IntelliJ IDEA.
+const JETBRAINS_AGENT_INSTRUCTIONS = `You are an IDE control agent for IntelliJ IDEA.
 
 You have access to JetBrains IDE tools via MCP. Use these tools to:
 - Read, create, and edit files in the project
@@ -36,10 +36,14 @@ When the user asks to do something with code, files, or the IDE:
 2. Use the appropriate tools to accomplish the task
 3. Report the results back to the user
 
-Always be precise with file paths and commands.`;
+IMPORTANT RULES:
+- NEVER ask clarifying questions. Always use available tools to discover information yourself.
+- If you need the project path, use tools to find it.
+- If a request is ambiguous, make your best judgment and proceed.
+- Always be precise with file paths and commands.`;
 
 let mcpServer: MCPServerStdio | null = null;
-let ideAgent: Agent | null = null;
+let jetbrainsAgent: Agent | null = null;
 let clientInitialized = false;
 let mcpConnected = false;
 
@@ -55,7 +59,7 @@ function initializeClient(): void {
   
   setDefaultModelProvider(provider);
   clientInitialized = true;
-  console.log('[ide_agent] OpenAI provider initialized with x.ai (chat completions), baseURL:', config.baseURL);
+  console.log('[jetbrains_agent] OpenAI provider initialized with x.ai (chat completions), baseURL:', config.baseURL);
 }
 
 async function getAgent(): Promise<Agent> {
@@ -71,22 +75,22 @@ async function getAgent(): Promise<Agent> {
   if (!mcpConnected) {
     await mcpServer.connect();
     mcpConnected = true;
-    console.log('[ide_agent] MCP server connected');
+    console.log('[jetbrains_agent] MCP server connected');
   }
 
-  if (!ideAgent) {
-    ideAgent = new Agent({
-      name: 'IDE Agent',
-      instructions: IDE_AGENT_INSTRUCTIONS,
+  if (!jetbrainsAgent) {
+    jetbrainsAgent = new Agent({
+      name: 'JetBrains Agent',
+      instructions: JETBRAINS_AGENT_INSTRUCTIONS,
       mcpServers: [mcpServer],
       model: getXAIConfig().model
     });
   }
 
-  return ideAgent;
+  return jetbrainsAgent;
 }
 
-export class IDEAgent {
+export class JetBrainsAgent {
   private initialized: boolean = false;
   private initError: string | null = null;
 
@@ -97,25 +101,25 @@ export class IDEAgent {
       const agent = await getAgent();
       await agent;
       this.initialized = true;
-      console.log('[ide_agent] Initialized successfully');
+      console.log('[jetbrains_agent] Initialized successfully');
     } catch (error) {
       this.initError = String(error);
-      console.error('[ide_agent] Initialization error:', error);
+      console.error('[jetbrains_agent] Initialization error:', error);
       throw error;
     }
   }
 
-  async process(prompt: string): Promise<IDEResult> {
-    console.log(`[ide_agent] Received prompt: ${prompt}`);
+  async process(prompt: string): Promise<JetBrainsResult> {
+    console.log(`[jetbrains_agent] Received prompt: ${prompt}`);
 
     if (!this.initialized) {
       try {
         await this.initialize();
       } catch {
         return {
-          agent: 'ide',
+          agent: 'jetbrains',
           status: 'error',
-          message: `Failed to initialize IDE agent: ${this.initError}`,
+          message: `Failed to initialize JetBrains agent: ${this.initError}`,
           received_prompt: prompt
         };
       }
@@ -125,17 +129,19 @@ export class IDEAgent {
       const agent = await getAgent();
       const result = await run(agent, prompt);
       
+      const message = result.finalOutput || 'Command executed successfully';
+      console.log(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
+
       return {
-        agent: 'ide',
+        agent: 'jetbrains',
         status: 'success',
-        message: result.finalOutput || 'Command executed successfully',
-        received_prompt: prompt,
-        result: result
+        message,
+        received_prompt: prompt
       };
     } catch (error) {
-      console.error('[ide_agent] Error:', error);
+      console.error('[jetbrains_agent] Error:', error);
       return {
-        agent: 'ide',
+        agent: 'jetbrains',
         status: 'error',
         message: String(error),
         received_prompt: prompt

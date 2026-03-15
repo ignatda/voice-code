@@ -1,5 +1,5 @@
 export interface PromptInfo {
-  agent: 'browser' | 'ide';
+  agent: 'browser' | 'jetbrains';
   prompt: string;
 }
 
@@ -14,22 +14,12 @@ export interface BrowserResult {
   error?: string;
 }
 
-export interface IDEResult {
-  agent: 'ide';
+export interface JetBrainsResult {
+  agent: 'jetbrains';
   status: 'dummy' | 'success' | 'error';
   message: string;
   received_prompt: string;
-  result?: unknown;
 }
-
-export type AgentResult = BrowserResult | IDEResult;
-
-export interface AudioStats {
-  chunks: number;
-  totalBytes: number;
-}
-
-export type SessionStatus = 'idle' | 'listening' | 'speaking' | 'processing' | 'executing';
 
 export interface XAIWebSocketMessage {
   type: string;

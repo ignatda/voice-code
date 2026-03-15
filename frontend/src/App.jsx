@@ -83,6 +83,12 @@ function App() {
       setConversationItems(prev => [...prev, { type: 'agent', agent: 'browser', text }]);
     });
 
+    socketRef.current.on('ide_result', (data) => {
+      console.log('[socket] IDE result:', data);
+      const text = data.message || 'No response';
+      setConversationItems(prev => [...prev, { type: 'agent', agent: 'jetbrains', text }]);
+    });
+
     socketRef.current.on('transcription_stopped', () => {
       console.log('[socket] Transcription stopped');
     });

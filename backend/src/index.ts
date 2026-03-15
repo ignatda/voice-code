@@ -15,7 +15,7 @@ dotenv.config({ path: envPath, override: true });
 
 // Dynamic imports so env vars are available when agent modules load
 const { XAIVoiceClient } = await import('./xai-realtime.js');
-const { OrchestratorAgent, BrowserAgent, IDEAgent } = await import('./agents/index.js');
+const { OrchestratorAgent, BrowserAgent, JetBrainsAgent } = await import('./agents/index.js');
 
 const XAI_API_KEY = process.env.OPENAI_API_KEY || process.env.XAI_API_KEY;
 const PORT = parseInt(process.env.PORT || '5000');
@@ -26,12 +26,11 @@ const io = new Server(httpServer, {
   cors: { origin: '*' },
 });
 const statusMap = new Map<string, string>();
-const audioStats = new Map<string, { chunks: number; totalBytes: number }>();
-const xaiClients = new Map<string, XAIVoiceClient>();
+const xaiClients = new Map<string, InstanceType<typeof XAIVoiceClient>>();
 
 const orchestratorAgent = new OrchestratorAgent(XAI_API_KEY || '');
 const browserAgent = new BrowserAgent();
-const ideAgent = new IDEAgent();
+const jetbrainsAgent = new JetBrainsAgent();
 
 function log(message: string, sid?: string): void {
   const ts = new Date().toISOString().split('T')[1].slice(0, -1);
@@ -49,12 +48,12 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
   for (const promptInfo of result.prompts) {
     if (promptInfo.agent === 'browser') {
       runBrowserCommand(promptInfo.prompt, sid);
-    } else if (promptInfo.agent === 'ide') {
-      ideAgent.process(promptInfo.prompt).then((result) => {
+    } else if (promptInfo.agent === 'jetbrains') {
+      jetbrainsAgent.process(promptInfo.prompt).then((result) => {
         io.to(sid).emit('ide_result', result);
       }).catch((error) => {
-        log(`[ide_agent] Error: ${error}`, sid);
-        io.to(sid).emit('ide_result', { agent: 'ide', status: 'error', message: String(error), received_prompt: promptInfo.prompt });
+        log(`[jetbrains_agent] Error: ${error}`, sid);
+        io.to(sid).emit('ide_result', { agent: 'jetbrains', status: 'error', message: String(error), received_prompt: promptInfo.prompt });
       });
     }
   }
@@ -137,13 +136,6 @@ io.on('connection', (socket) => {
       statusMap.set(sid, 'listening');
       socket.emit('status', { status: 'listening' });
     }
-
-    if (!audioStats.has(sid)) {
-      audioStats.set(sid, { chunks: 0, totalBytes: 0 });
-    }
-    const stats = audioStats.get(sid)!;
-    stats.chunks++;
-    stats.totalBytes += buffer.length;
   });
 
   socket.on('commit_audio', () => {
@@ -152,7 +144,6 @@ io.on('connection', (socket) => {
     if (xaiClient) {
       xaiClient.commitAudio();
     }
-    audioStats.set(sid, { chunks: 0, totalBytes: 0 });
   });
 
   socket.on('stop_transcription_stream', async () => {
@@ -167,7 +158,6 @@ io.on('connection', (socket) => {
     }
 
     statusMap.delete(sid);
-    audioStats.delete(sid);
   });
 
   socket.on('disconnect', () => {
@@ -179,7 +169,6 @@ io.on('connection', (socket) => {
       xaiClients.delete(sid);
     }
     statusMap.delete(sid);
-    audioStats.delete(sid);
   });
 });
 
