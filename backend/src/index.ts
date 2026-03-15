@@ -10,7 +10,8 @@ const __dirname = path.dirname(__filename);
 
 // Load .env BEFORE agent imports (agents SDK sets up tracing at import time)
 const envPath = path.resolve(__dirname, '..', '.env');
-console.log('[init] Loading .env from:', envPath);
+const { log } = await import('./log.js');
+log('[init] Loading .env from: ' + envPath);
 dotenv.config({ path: envPath, override: true });
 
 // Dynamic imports so env vars are available when agent modules load
@@ -33,11 +34,6 @@ const xaiClients = new Map<string, InstanceType<typeof XAIVoiceClient>>();
 const orchestratorAgent = new OrchestratorAgent(XAI_API_KEY || '');
 const browserAgent = new BrowserAgent();
 const jetbrainsAgent = new JetBrainsAgent();
-
-function log(message: string, sid?: string): void {
-  const ts = new Date().toISOString().split('T')[1].slice(0, -1);
-  console.log(sid ? `[${ts}] ${message}, sid=${sid.slice(0, 8)}` : `[${ts}] ${message}`);
-}
 
 async function processWithOrchestrator(transcription: string, sid: string): Promise<void> {
   if (isStopCommand(transcription)) {

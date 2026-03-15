@@ -2,6 +2,7 @@ import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/age
 import { MCPServerStdio } from '@openai/agents';
 import type { JetBrainsResult } from '../types';
 import { getXAIConfig } from './config.js';
+import { log, logError } from '../log.js';
 
 const CLI_TOOLS: Record<string, { bin: string; run: string; continueFlag: string }> = {
   opencode: {
@@ -36,82 +37,40 @@ const JETBRAINS_MCP_CONFIG = {
 
 const getJetBrainsInstructions = (readOnly = false) => {
   const cli = getCliTool();
-  const readOnlyCliNote = readOnly
-    ? `\n\nCRITICAL: READ-ONLY MODE is active. When delegating to the coding CLI, you MUST prepend the following to every prompt:\n"READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer questions about the code."\n`
+  const cliPrefix = readOnly
+    ? 'READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer. '
     : '';
 
-  if (readOnly) {
-    return `You are an IDE control agent for IntelliJ IDEA in READ-ONLY mode.
+  return `You are an IDE control agent for IntelliJ IDEA${readOnly ? ' in READ-ONLY mode' : ''}.
 
-You have access to JetBrains IDE tools via MCP.
+You have access to JetBrains IDE tools via MCP.${readOnly ? '' : ' You act as a dispatcher that simulates human hands.'}
 
-## Allowed actions (read-only):
-- Open files (read only)
-- Navigate to symbols or lines
-- Search in project
-- Read file contents
-- Get project structure
-- List directory trees
-- Get file problems / diagnostics
+## Direct IDE actions (use MCP tools directly):
+- Open files, navigate to symbols or lines
+- Search in project, read file contents
+- Get project structure, list directory trees
+- Get file problems / diagnostics${readOnly ? '' : '\n- Create, edit, rename, reformat files'}
 
-## Coding CLI (read-only analysis only):
-You MAY use the coding CLI for code analysis, explanation, or questions — but NEVER for editing.
+## Coding CLI (delegate to AI CLI in terminal):
+${readOnly
+  ? 'You MAY use the coding CLI for code analysis, explanation, or questions — but NEVER for editing.'
+  : 'For ANY code writing, editing, refactoring, or generation task, use the coding CLI.'}
 
-First command in a conversation:
-\`${cli.bin} ${cli.run} "READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer. <actual prompt>"\`
+First command: \`${cli.bin} ${cli.run} "${cliPrefix}<prompt>"\`
+Subsequent commands: \`${cli.bin} ${cli.run} ${cli.continueFlag} "${cliPrefix}<prompt>"\`
 
-Subsequent commands:
-\`${cli.bin} ${cli.run} ${cli.continueFlag} "READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer. <actual prompt>"\`
-
-IMPORTANT: Always use execute_terminal_command with these parameters:
-- command: the CLI command above
-- executeInShell: true
-- timeout: 120000
-
+Always use execute_terminal_command with: executeInShell: true, timeout: 120000
+${readOnly ? `
 ## STRICTLY FORBIDDEN in read-only mode:
 - NEVER create, edit, delete, rename, or write files via MCP tools
 - NEVER use replace_text_in_file, create_new_file, reformat_file, rename_refactoring
-- NEVER send coding/editing prompts to the CLI — only analysis/read prompts
-
-## RULES:
-- NEVER ask clarifying questions. Use available tools to discover information.
-- Use ${cli.continueFlag} on every coding command EXCEPT the very first one in a conversation.`;
-  }
-
-  return `You are an IDE control agent for IntelliJ IDEA.
-
-You have access to JetBrains IDE tools via MCP. You act as a dispatcher that simulates human hands.
-
-## Two modes of operation:
-
-### 1. Direct IDE actions (use MCP tools directly):
-- Open/close files
-- Navigate to symbols or lines
-- Search in project
-- Read file contents
-- Get project structure
-- Any IDE UI action
-
-### 2. Coding tasks (delegate to AI CLI in terminal):
-For ANY code writing, editing, refactoring, or generation task, use the execute_terminal_command tool to run the coding CLI.
-
-First coding command in a conversation:
-\`${cli.bin} ${cli.run} "<detailed coding instruction>"\`
-
-All subsequent coding commands (to keep context of previous changes):
-\`${cli.bin} ${cli.run} ${cli.continueFlag} "<follow-up instruction>"\`
-
-IMPORTANT: Always use execute_terminal_command with these parameters:
-- command: the CLI command above
-- executeInShell: true
-- timeout: 120000
-
+- NEVER send coding/editing prompts to the CLI — only analysis/read prompts` : `
 ## RULES:
 - NEVER write or edit code yourself. Always delegate coding to the CLI.
+- For IDE navigation/reading tasks, use MCP tools directly.`}
+
 - NEVER ask clarifying questions. Use available tools to discover information.
-- For coding tasks, pass the full detailed prompt to the CLI.
-- For IDE navigation/reading tasks, use MCP tools directly.
-- Use ${cli.continueFlag} on every coding command EXCEPT the very first one in a conversation.`;
+- Use ${cli.continueFlag} on every CLI command EXCEPT the very first one in a conversation.`;
 };
 
 let mcpServer: MCPServerStdio | null = null;
@@ -131,7 +90,7 @@ function initializeClient(): void {
   
   setDefaultModelProvider(provider);
   clientInitialized = true;
-  console.log('[jetbrains_agent] OpenAI provider initialized with x.ai (chat completions), baseURL:', config.baseURL);
+  log('[jetbrains_agent] OpenAI provider initialized with x.ai (chat completions), baseURL: ' + config.baseURL);
 }
 
 async function getAgent(readOnly = false): Promise<Agent> {
@@ -147,7 +106,7 @@ async function getAgent(readOnly = false): Promise<Agent> {
   if (!mcpConnected) {
     await mcpServer.connect();
     mcpConnected = true;
-    console.log('[jetbrains_agent] MCP server connected');
+    log('[jetbrains_agent] MCP server connected');
   }
 
   // Recreate agent each time — instructions depend on readOnly mode
@@ -172,10 +131,10 @@ export class JetBrainsAgent {
     try {
       await getAgent(false);
       this.initialized = true;
-      console.log('[jetbrains_agent] Initialized successfully');
+      log('[jetbrains_agent] Initialized successfully');
     } catch (error) {
       this.initError = String(error);
-      console.error('[jetbrains_agent] Initialization error:', error);
+      logError(`[jetbrains_agent] Initialization error: ${error}`);
       throw error;
     }
   }
@@ -183,14 +142,14 @@ export class JetBrainsAgent {
   async killTerminalProcess(): Promise<void> {
     if (!mcpServer || !mcpConnected) return;
     try {
-      console.log('[jetbrains_agent] Sending Ctrl+C to terminal');
+      log('[jetbrains_agent] Sending Ctrl+C to terminal');
       await mcpServer.callTool('execute_terminal_command', {
         command: '\x03',
         reuseExistingTerminalWindow: true,
         timeout: 3000,
       });
     } catch (e) {
-      console.log('[jetbrains_agent] Terminal kill attempt:', e);
+      log(`[jetbrains_agent] Terminal kill attempt: ${e}`);
     }
   }
 
@@ -202,7 +161,7 @@ export class JetBrainsAgent {
     const modeHint = readOnly ? '\n[MODE: READ-ONLY — do NOT write, edit, create files or run coding CLI.]' : '';
     const augmentedPrompt = prompt + sessionHint + modeHint;
 
-    console.log(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);
+    log(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);
 
     if (!this.initialized) {
       try {
@@ -225,12 +184,12 @@ export class JetBrainsAgent {
         .filter((item: any) => item.type === 'tool_call_item')
         .map((item: any) => item.rawItem?.name || 'unknown');
       if (toolCalls.length > 0) {
-        console.log(`[jetbrains_agent] Tools used: ${toolCalls.join(', ')}`);
+        log(`[jetbrains_agent] Tools used: ${toolCalls.join(', ')}`);
       }
 
       this.hasActiveSession = true;
       const message = result.finalOutput || 'Command executed successfully';
-      console.log(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
+      log(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
 
       return {
         agent: 'jetbrains',
@@ -240,7 +199,7 @@ export class JetBrainsAgent {
       };
     } catch (error) {
       if (signal?.aborted) {
-        console.log(`[jetbrains_agent] Interrupted by user`);
+        log(`[jetbrains_agent] Interrupted by user`);
         await this.killTerminalProcess();
         return {
           agent: 'jetbrains',
@@ -249,7 +208,7 @@ export class JetBrainsAgent {
           received_prompt: prompt
         };
       }
-      console.error('[jetbrains_agent] Error:', error);
+      logError(`[jetbrains_agent] Error: ${error}`);
       return {
         agent: 'jetbrains',
         status: 'error',
