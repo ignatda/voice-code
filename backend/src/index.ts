@@ -47,7 +47,7 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
   const isReadOnly = readOnlyMap.get(sid) ?? false;
   log(`[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}`, sid);
 
-  const result = await orchestratorAgent.process(transcription, isReadOnly);
+  const result = await orchestratorAgent.process(transcription, isReadOnly, sid);
 
   log(`[orchestrator] Generated ${result.prompts.length} prompts`, sid);
   io.to(sid).emit('transcription_result', result);
@@ -184,6 +184,7 @@ io.on('connection', (socket) => {
     log('[socketio] Client disconnected', sid);
     abortAll(sid);
     cleanup(sid);
+    orchestratorAgent.clearHistory(sid);
     const xaiClient = xaiClients.get(sid);
     if (xaiClient) {
       log('[x.ai] Closing connection due to client disconnect', sid);

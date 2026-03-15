@@ -124,6 +124,7 @@ export class JetBrainsAgent {
   private initialized: boolean = false;
   private initError: string | null = null;
   private hasActiveSession: boolean = false;
+  private conversationHistory: any[] = [];
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -178,7 +179,10 @@ export class JetBrainsAgent {
 
     try {
       const agent = await getAgent(readOnly);
-      const result = await run(agent, augmentedPrompt, { signal });
+      const input = this.conversationHistory.length > 0
+        ? [...this.conversationHistory, { role: 'user' as const, content: augmentedPrompt }]
+        : augmentedPrompt;
+      const result = await run(agent, input, { signal });
       
       const toolCalls = result.newItems
         .filter((item: any) => item.type === 'tool_call_item')
@@ -188,6 +192,7 @@ export class JetBrainsAgent {
       }
 
       this.hasActiveSession = true;
+      this.conversationHistory = result.history.slice(-40);
       const message = result.finalOutput || 'Command executed successfully';
       log(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
 

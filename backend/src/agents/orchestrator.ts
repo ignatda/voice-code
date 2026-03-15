@@ -44,6 +44,7 @@ Rules:
 export class OrchestratorAgent {
   private client: OpenAI;
   private model: string;
+  private history: Map<string, Array<{ role: 'user' | 'assistant'; content: string }>> = new Map();
 
   constructor(apiKey: string) {
     this.client = new OpenAI({
@@ -53,7 +54,11 @@ export class OrchestratorAgent {
     this.model = 'grok-4-1-fast-non-reasoning';
   }
 
-  async process(transcription: string, readOnly = false): Promise<OrchestratorResult> {
+  clearHistory(sid: string): void {
+    this.history.delete(sid);
+  }
+
+  async process(transcription: string, readOnly = false, sid?: string): Promise<OrchestratorResult> {
     if (!transcription || transcription.trim().length < 3) {
       return {
         original_text: transcription,
@@ -97,16 +102,17 @@ export class OrchestratorAgent {
       logError(`[orchestrator] Translation error: ${error}`);
     }
 
+    const sessionHistory = sid ? (this.history.get(sid) || []) : [];
+
     try {
+      const userMsg = `Analyze this transcribed speech and output JSON with agent prompts: ${translatedText}`;
       const response = await this.client.chat.completions.create({
         model: this.model,
         messages: [
           { role: 'system', content: ORCHESTRATOR_SYSTEM_PROMPT },
           ...(readOnly ? [{ role: 'system' as const, content: 'READ-ONLY MODE is active. Agents can only read/view/navigate. Do NOT generate prompts for writing, editing, creating, or deleting files or code. If the user asks for modifications, still route to the appropriate agent — the agent will inform them about read-only restrictions.' }] : []),
-          {
-            role: 'user',
-            content: `Analyze this transcribed speech and output JSON with agent prompts: ${translatedText}`,
-          },
+          ...sessionHistory,
+          { role: 'user', content: userMsg },
         ],
         temperature: 0.0,
       });
@@ -122,6 +128,14 @@ export class OrchestratorAgent {
         throw new Error('No JSON found in response');
       }
       const result = JSON.parse(jsonMatch[0]);
+
+      if (sid) {
+        sessionHistory.push({ role: 'user', content: userMsg });
+        sessionHistory.push({ role: 'assistant', content: content });
+        // Keep last 20 turns to avoid token overflow
+        if (sessionHistory.length > 40) sessionHistory.splice(0, sessionHistory.length - 40);
+        this.history.set(sid, sessionHistory);
+      }
 
       return {
         original_text: transcription,
