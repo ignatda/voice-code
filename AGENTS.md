@@ -6,18 +6,30 @@ This document provides guidelines for agentic coding agents operating in this re
 
 - **Project Name**: Voice Code
 - **Type**: Real-time voice-to-code IDE
-- **Stack**: React.js frontend (Vite), Python Flask backend (SocketIO), Grok API
+- **Stack**: React.js frontend (Vite), Node.js Express backend (Socket.IO), Grok API
 - **Language**: English and Russian voice transcription
+
+## Architecture
+
+The system uses a multi-agent architecture powered by the **OpenAI Agents SDK** (`@openai/agents`):
+
+1. **Orchestrator Agent** — Analyzes transcribed speech, translates to English, and routes commands to specialized agents via the OpenAI `chat.completions` API.
+2. **Browser Agent** — Controls a Chromium browser via Playwright MCP server. Uses the OpenAI Agents SDK with `useResponses: false` (Chat Completions mode) against the Grok API.
+3. **IDE Agent** — Controls IntelliJ IDEA via JetBrains MCP server. Same SDK configuration as the Browser Agent.
+4. **x.ai Realtime API** — Handles voice input/output via WebSocket (PCM16 audio at 16kHz mono).
 
 ## Technology Stack
 
-- **AI Framework**: CAMEL-AI (https://docs.camel-ai.org/)
-    - Reference implementation: https://github.com/camel-ai/camel
+- **AI Framework**: OpenAI Agents SDK v0.7+ (`@openai/agents`) — configured with `useResponses: false` for Grok API compatibility
 - **LLM Provider**: Grok API (https://docs.x.ai)
     - API key configured via `OPENAI_API_KEY` in `.env`
-- **Frontend**: React.js 19 with Vite
-- **Backend**: Python Flask with Flask-SocketIO
+    - Base URL: `https://api.x.ai/v1`
+    - Tracing disabled via `OPENAI_AGENTS_DISABLE_TRACING=1` (incompatible with Grok)
+- **Frontend**: React 19 with Vite
+- **Backend**: Node.js Express with Socket.IO, TypeScript
 - **Real-time Communication**: WebSocket (x.ai Realtime API)
+- **Browser Control**: Playwright MCP Server (`@playwright/mcp`)
+- **IDE Integration**: JetBrains MCP Server (IntelliJ IDEA)
 - **Containerization**: Docker with docker-compose
 
 ## Build, Lint, and Test Commands
@@ -25,52 +37,27 @@ This document provides guidelines for agentic coding agents operating in this re
 ### Frontend (React + Vite)
 
 ```bash
-# Navigate to frontend directory
 cd frontend
-
-# Install dependencies
 npm install
-
-# Development server
-npm run dev
-
-# Production build
-npm run build
-
-# Lint code (ESLint)
-npm run lint
-
-# Preview production build
-npm run preview
-
-# Run a single test (if tests exist)
-npm test -- --run
+npm run dev       # Development server
+npm run build     # Production build
+npm run lint      # ESLint
+npm run preview   # Preview production build
 ```
 
-### Backend (Python Flask)
+### Backend (Node.js + Express)
 
 ```bash
-# Navigate to backend directory
 cd backend
-
-# Create virtual environment (if not exists)
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run backend server
-python app.py
-
-# Run a single test (if pytest is added)
-pytest path/to/test_file.py::test_function_name -v
+npm install
+npm run dev       # Development server (tsx watch)
+npm run build     # TypeScript compilation
+npm start         # Production server
 ```
 
 ### Docker
 
 ```bash
-# Run with docker-compose
 docker-compose up --build
 ```
 
@@ -81,136 +68,69 @@ docker-compose up --build
 1. **Clean, maintainable code** with proper error handling
 2. **Well-documented** with clear comments for complex logic
 3. **Follow existing patterns** in the codebase
-4. **Use type hints** in Python where possible
+4. **Use TypeScript types** in backend
 
 ### JavaScript/React (Frontend)
 
-**File Structure**:
-- Components in `src/`
-- Use `.jsx` extension for React components
-- Co-locate styles with components using `.css` files
-
-**Naming Conventions**:
-- Components: PascalCase (`App.jsx`, `TranscriptionPanel.jsx`)
-- Functions/variables: camelCase
-- Constants: UPPER_SNAKE_CASE
-- Files: kebab-case
-
-**Imports**:
-```javascript
-// React core imports first
-import { useState, useEffect, useCallback } from 'react';
-
-// External libraries
-import { io } from 'socket.io-client';
-
-// Internal imports
-import './App.css';
-```
-
-**React Patterns**:
-- Use functional components with hooks
-- Use `useCallback` for event handlers passed to child components
-- Use `useRef` for mutable refs (media recorders, sockets)
+- Components in `frontend/src/`, use `.jsx` extension
+- Components: PascalCase, functions/variables: camelCase, constants: UPPER_SNAKE_CASE
+- Functional components with hooks (`useState`, `useEffect`, `useCallback`, `useRef`)
 - Clean up resources in `useEffect` return function
 
-**Error Handling**:
-- Use try/catch for async operations
-- Emit errors to UI via socket events
-- Log errors to console with descriptive messages
-
-### Python (Backend)
+### TypeScript/Node.js (Backend)
 
 **File Structure**:
-- Main application in `backend/app.py`
-- Configuration via environment variables in `.env`
+- Main application: `backend/src/index.ts`
+- Agents: `backend/src/agents/` (browser.ts, ide.ts, orchestrator.ts)
+- Types: `backend/src/types/`
+- Realtime client: `backend/src/xai-realtime.ts`
+
+**Key patterns**:
+- Env vars read lazily via getter functions (not at module scope) to ensure dotenv has loaded
+- Agent modules dynamically imported in `index.ts` after dotenv loads
+- `OpenAIProvider` configured with `useResponses: false` for Grok compatibility
+- MCP servers spawned with full `process.env` to inherit `DISPLAY` for headed browser mode
 
 **Imports**:
-```python
-# Standard library first
-import base64
-import json
-import os
+```typescript
+// Node.js built-ins first
+import { createServer } from 'http';
 
-# Third-party libraries
-from flask import Flask, request
-from flask_socketio import SocketIO, emit, join_room
-from websocket import create_connection, WebSocketConnectionClosedException
+// External libraries
+import express from 'express';
+import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/agents';
+import { MCPServerStdio } from '@openai/agents';
 
-# Local imports (last)
-from dotenv import load_dotenv
+// Local imports last
+import type { BrowserResult } from '../types';
 ```
 
-**Naming Conventions**:
-- Functions: snake_case (`handle_audio_chunk`, `connect_to_xai`)
-- Classes: PascalCase
-- Constants: UPPER_SNAKE_CASE
-- Private methods: prefix with underscore
-
-**Type Hints**:
-- Use type hints for function parameters and return values where beneficial
-- Example: `def handle_audio_chunk(data: dict) -> None:`
-
 **Error Handling**:
-- Use try/except blocks for WebSocket and network operations
-- Emit error events to client rather than raising
+- Use try/catch blocks for WebSocket and network operations
+- Emit error events to client via Socket.IO rather than throwing
 - Log errors with descriptive messages including session IDs
-
-**SocketIO Patterns**:
-- Use `request.sid` for session identification
-- Join rooms based on session ID: `join_room(sid)`
-- Emit events to specific rooms: `emit('event_name', data, room=sid)`
-- Clean up connections on disconnect
 
 ### Shared Conventions
 
 **Environment Variables**:
 - Store secrets in `.env` (never commit)
 - Use `.env.example` for template
-- Access via `os.getenv()` in Python, `import.meta.env` in Vite
+- Access via `process.env` in Node.js, `import.meta.env` in Vite
 
-**Logging**:
-- Use console.log/console.error in frontend
-- Use print() in backend
-- Include context (session IDs, operation names) in logs
-
-**WebSocket Communication**:
-- Frontend: Socket.IO client
-- Backend: Flask-SocketIO with gevent async mode
-- Use JSON for message serialization
-
-## Testing Guidelines
-
-Currently, no test framework is configured. When adding tests:
-
-**Frontend**:
-- Use Vitest or Jest
-- Place tests alongside components: `Component.test.jsx`
-- Run single test: `npm test -- --run path/to/test.jsx`
-
-**Backend**:
-- Use pytest
-- Place tests in `backend/tests/` directory
-- Run single test: `pytest backend/tests/test_file.py::test_name -v`
+**Socket.IO Events**:
+- `transcription_result` — orchestrator output with agent prompts
+- `browser_result` — `{ status, message }` from browser agent
+- `ide_result` — result from IDE agent
+- `audio_delta` — audio chunks from x.ai realtime API
 
 ## Important Notes
 
-1. **Monkey Patching**: In `backend/app.py`, `gevent.monkey.patch_all()` must be called before other imports
-2. **CORS**: Backend allows all origins (`cors_allowed_origories="*"`) for development
-3. **Secret Key**: Default secret key is insecure; use environment variable in production
-4. **Audio Format**: Frontend converts microphone input to PCM16 (16kHz mono) before sending
+1. **CORS**: Backend allows all origins for development
+2. **Audio Format**: Frontend converts microphone input to PCM16 (16kHz mono)
+3. **Grok API compatibility**: Must use Chat Completions mode (`useResponses: false`), not the OpenAI Responses API
+4. **Tracing**: Disabled via env var — the OpenAI Agents SDK tracing hits `platform.openai.com` which rejects Grok API keys
 
 ## Dependencies
 
 **Frontend**: React 19, Vite, Socket.IO-client, Axios
-**Backend**: Flask, Flask-SocketIO, gevent, websocket-client, python-dotenv
-
-## Development Workflow
-
-1. Follow Grok API documentation for all LLM-related implementations
-2. Prioritize clean, maintainable code with proper error handling
-3. Ensure codebase is well-documented with clear comments for complex logic
-4. Implement unit tests and integration tests to ensure code reliability
-5. Use version control (Git) to track changes
-6. Document architecture and design decisions for future maintenance
-7. Regularly update dependencies and security patches
+**Backend**: Express, Socket.IO, ws, OpenAI Agents SDK (`@openai/agents`), OpenAI client (`openai`), Playwright, MCP SDK, dotenv, zod

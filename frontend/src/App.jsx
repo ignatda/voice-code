@@ -79,10 +79,8 @@ function App() {
 
     socketRef.current.on('browser_result', (data) => {
       console.log('[socket] Browser result:', data);
-      if (data.result) {
-        const responseText = typeof data.result === 'string' ? data.result : JSON.stringify(data.result, null, 2);
-        setConversationItems(prev => [...prev, { type: 'agent', agent: 'browser', text: responseText }]);
-      }
+      const text = data.message || data.error || 'No response';
+      setConversationItems(prev => [...prev, { type: 'agent', agent: 'browser', text }]);
     });
 
     socketRef.current.on('transcription_stopped', () => {

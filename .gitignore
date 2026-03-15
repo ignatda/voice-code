@@ -1,14 +1,3 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-.venv/
-venv/
-ENV/
-env/
-
 # Environment variables
 .env
 
@@ -27,7 +16,6 @@ yarn-error.log*
 # Build
 dist/
 build/
-*.egg-info/
 
 # OS
 .DS_Store
