@@ -11,7 +11,7 @@ function App() {
   const [status, setStatus] = useState('idle');
   const [conversationItems, setConversationItems] = useState([]);
   const [error, setError] = useState('');
-  const [readOnly, setReadOnly] = useState(() => localStorage.getItem('readOnlyMode') !== 'false');
+  const [readOnly, setReadOnly] = useState(() => localStorage.getItem('readOnlyMode') === 'true');
 
   const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
@@ -29,7 +29,7 @@ function App() {
       console.log('[socket] Connected to backend');
       setIsConnected(true);
       setError('');
-      socketRef.current.emit('set_read_only', localStorage.getItem('readOnlyMode') !== 'false');
+      socketRef.current.emit('set_read_only', localStorage.getItem('readOnlyMode') === 'true');
     });
 
     socketRef.current.on('disconnect', () => {

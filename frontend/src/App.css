@@ -313,16 +313,6 @@ body {
   border-color: #ff9800;
 }
 
-.App.read-only .content {
-  position: relative;
-}
-
-.App.read-only .content::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  cursor: not-allowed;
-}
 
 /* Read-only badge in status bar */
 .readonly-badge {

@@ -48,7 +48,7 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
     return;
   }
 
-  const isReadOnly = readOnlyMap.get(sid) ?? true;
+  const isReadOnly = readOnlyMap.get(sid) ?? false;
   log(`[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}`, sid);
 
   const result = await orchestratorAgent.process(transcription, isReadOnly);
