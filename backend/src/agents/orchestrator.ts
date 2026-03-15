@@ -52,7 +52,7 @@ export class OrchestratorAgent {
     this.model = 'grok-4-1-fast-non-reasoning';
   }
 
-  async process(transcription: string): Promise<OrchestratorResult> {
+  async process(transcription: string, readOnly = false): Promise<OrchestratorResult> {
     if (!transcription || transcription.trim().length < 3) {
       return {
         original_text: transcription,
@@ -101,6 +101,7 @@ export class OrchestratorAgent {
         model: this.model,
         messages: [
           { role: 'system', content: ORCHESTRATOR_SYSTEM_PROMPT },
+          ...(readOnly ? [{ role: 'system' as const, content: 'READ-ONLY MODE is active. Agents can only read/view/navigate. Do NOT generate prompts for writing, editing, creating, or deleting files or code. If the user asks for modifications, still route to the appropriate agent — the agent will inform them about read-only restrictions.' }] : []),
           {
             role: 'user',
             content: `Analyze this transcribed speech and output JSON with agent prompts: ${translatedText}`,

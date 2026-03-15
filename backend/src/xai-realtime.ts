@@ -97,7 +97,9 @@ export class XAIVoiceClient {
       const message: XAIWebSocketMessage = JSON.parse(rawMessage);
       const type = message.type;
 
-      console.log(`[x.ai → backend] type=${type}, sid=${this.sessionSid.slice(0, 8)}`);
+      if (type !== 'response.output_audio.delta' && type !== 'response.audio.delta') {
+        console.log(`[x.ai → backend] type=${type}, sid=${this.sessionSid.slice(0, 8)}`);
+      }
 
       switch (type) {
         case 'input_audio_buffer.speech_started':

@@ -9,8 +9,8 @@ function App() {
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
   const [conversationItems, setConversationItems] = useState([]);
-  const [prompts, setPrompts] = useState([]);
   const [error, setError] = useState('');
+  const [readOnly, setReadOnly] = useState(() => localStorage.getItem('readOnlyMode') !== 'false');
 
   const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
@@ -28,6 +28,7 @@ function App() {
       console.log('[socket] Connected to backend');
       setIsConnected(true);
       setError('');
+      socketRef.current.emit('set_read_only', localStorage.getItem('readOnlyMode') !== 'false');
     });
 
     socketRef.current.on('disconnect', () => {
@@ -69,7 +70,10 @@ function App() {
         });
       }
       if (data.prompts?.length > 0) {
-        setPrompts(data.prompts);
+        setConversationItems(prev => [
+          ...prev,
+          ...data.prompts.map(p => ({ type: 'agent', agent: 'orchestrator', text: p.prompt }))
+        ]);
       }
     });
 
@@ -91,6 +95,12 @@ function App() {
 
     socketRef.current.on('transcription_stopped', () => {
       console.log('[socket] Transcription stopped');
+    });
+
+    socketRef.current.on('agents_stopped', (data) => {
+      console.log('[socket] Agents stopped:', data.message);
+      setConversationItems(prev => [...prev, { type: 'system', text: '⛔ All agents stopped.' }]);
+      setStatus('idle');
     });
 
     socketRef.current.on('error', (data) => {
@@ -188,6 +198,23 @@ function App() {
     }
   };
 
+  const stopAll = () => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit('stop_all');
+    }
+  };
+
+  const toggleReadOnly = () => {
+    setReadOnly(prev => {
+      const next = !prev;
+      localStorage.setItem('readOnlyMode', String(next));
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('set_read_only', next);
+      }
+      return next;
+    });
+  };
+
   const getStatusText = () => {
     switch (status) {
       case 'listening': return 'Listening';
@@ -199,32 +226,62 @@ function App() {
   };
 
   return (
-    <div className="App">
+    <div className={`App${readOnly ? ' read-only' : ''}`}>
       <header className="top-bar">
         <div className="status-indicator">
           <span className={`status-dot ${status}`}></span>
           <span className="status-label">{getStatusText()}</span>
+          {readOnly && <span className="readonly-badge">READ-ONLY</span>}
         </div>
 
-        <button
-          className={`mic-toggle ${micEnabled ? 'enabled' : ''}`}
-          onClick={toggleMic}
-          disabled={!isConnected}
-          title={micEnabled ? 'Disable microphone' : 'Enable microphone'}
-        >
-          {micEnabled ? (
-            <svg viewBox="0 0 24 24" width="28" height="28">
-              <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        <div className="controls">
+          <button
+            className={`mic-toggle ${micEnabled ? 'enabled' : ''}`}
+            onClick={toggleMic}
+            disabled={!isConnected}
+            title={micEnabled ? 'Disable microphone' : 'Enable microphone'}
+          >
+            {micEnabled ? (
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            )}
+          </button>
+
+          <button
+            className="stop-button"
+            onClick={stopAll}
+            disabled={!isConnected || status === 'idle'}
+            title="Stop all agents"
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20">
+              <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor"/>
             </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" width="28" height="28">
-              <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-              <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-              <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          )}
-        </button>
+          </button>
+
+          <button
+            className={`readonly-toggle${readOnly ? ' active' : ''}`}
+            onClick={toggleReadOnly}
+            title="Toggle Read-Only Mode"
+          >
+            {readOnly ? (
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <path fill="currentColor" d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.8 11.8 0 001 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" width="20" height="20">
+                <path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+              </svg>
+            )}
+          </button>
+        </div>
       </header>
 
       <main className="content">
@@ -248,19 +305,6 @@ function App() {
         </div>
       </main>
 
-      <footer className="command-panel">
-        <div className="command-list">
-          {prompts.map((prompt, index) => (
-            <div key={index} className="command-item">
-              <span className="agent-badge">{prompt.agent}</span>
-              <span className="command-text">{prompt.prompt}</span>
-            </div>
-          ))}
-          {prompts.length === 0 && (
-            <span className="no-commands">No commands yet</span>
-          )}
-        </div>
-      </footer>
     </div>
   );
 }

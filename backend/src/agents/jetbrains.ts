@@ -1,13 +1,7 @@
 import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/agents';
 import { MCPServerStdio } from '@openai/agents';
 import type { JetBrainsResult } from '../types';
-
-// Read env vars lazily to ensure dotenv has loaded
-const getXAIConfig = () => ({
-  apiKey: process.env.OPENAI_API_KEY || '',
-  baseURL: process.env.OPENAI_BASE_URL || 'https://api.x.ai/v1',
-  model: process.env.OPENAI_MODEL || 'grok-4-1-fast-non-reasoning',
-});
+import { getXAIConfig } from './config.js';
 
 const CLI_TOOLS: Record<string, { bin: string; run: string; continueFlag: string }> = {
   opencode: {
@@ -40,8 +34,50 @@ const JETBRAINS_MCP_CONFIG = {
   timeout: 60000
 };
 
-const getJetBrainsInstructions = () => {
+const getJetBrainsInstructions = (readOnly = false) => {
   const cli = getCliTool();
+  const readOnlyCliNote = readOnly
+    ? `\n\nCRITICAL: READ-ONLY MODE is active. When delegating to the coding CLI, you MUST prepend the following to every prompt:\n"READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer questions about the code."\n`
+    : '';
+
+  if (readOnly) {
+    return `You are an IDE control agent for IntelliJ IDEA in READ-ONLY mode.
+
+You have access to JetBrains IDE tools via MCP.
+
+## Allowed actions (read-only):
+- Open files (read only)
+- Navigate to symbols or lines
+- Search in project
+- Read file contents
+- Get project structure
+- List directory trees
+- Get file problems / diagnostics
+
+## Coding CLI (read-only analysis only):
+You MAY use the coding CLI for code analysis, explanation, or questions — but NEVER for editing.
+
+First command in a conversation:
+\`${cli.bin} ${cli.run} "READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer. <actual prompt>"\`
+
+Subsequent commands:
+\`${cli.bin} ${cli.run} ${cli.continueFlag} "READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer. <actual prompt>"\`
+
+IMPORTANT: Always use execute_terminal_command with these parameters:
+- command: the CLI command above
+- executeInShell: true
+- timeout: 120000
+
+## STRICTLY FORBIDDEN in read-only mode:
+- NEVER create, edit, delete, rename, or write files via MCP tools
+- NEVER use replace_text_in_file, create_new_file, reformat_file, rename_refactoring
+- NEVER send coding/editing prompts to the CLI — only analysis/read prompts
+
+## RULES:
+- NEVER ask clarifying questions. Use available tools to discover information.
+- Use ${cli.continueFlag} on every coding command EXCEPT the very first one in a conversation.`;
+  }
+
   return `You are an IDE control agent for IntelliJ IDEA.
 
 You have access to JetBrains IDE tools via MCP. You act as a dispatcher that simulates human hands.
@@ -98,7 +134,7 @@ function initializeClient(): void {
   console.log('[jetbrains_agent] OpenAI provider initialized with x.ai (chat completions), baseURL:', config.baseURL);
 }
 
-async function getAgent(): Promise<Agent> {
+async function getAgent(readOnly = false): Promise<Agent> {
   initializeClient();
   
   if (!mcpServer) {
@@ -114,14 +150,13 @@ async function getAgent(): Promise<Agent> {
     console.log('[jetbrains_agent] MCP server connected');
   }
 
-  if (!jetbrainsAgent) {
-    jetbrainsAgent = new Agent({
-      name: 'JetBrains Agent',
-      instructions: getJetBrainsInstructions(),
-      mcpServers: [mcpServer],
-      model: getXAIConfig().model
-    });
-  }
+  // Recreate agent each time — instructions depend on readOnly mode
+  jetbrainsAgent = new Agent({
+    name: 'JetBrains Agent',
+    instructions: getJetBrainsInstructions(readOnly),
+    mcpServers: [mcpServer],
+    model: getXAIConfig().model
+  });
 
   return jetbrainsAgent;
 }
@@ -135,8 +170,7 @@ export class JetBrainsAgent {
     if (this.initialized) return;
     
     try {
-      const agent = await getAgent();
-      await agent;
+      await getAgent(false);
       this.initialized = true;
       console.log('[jetbrains_agent] Initialized successfully');
     } catch (error) {
@@ -146,12 +180,27 @@ export class JetBrainsAgent {
     }
   }
 
-  async process(prompt: string): Promise<JetBrainsResult> {
+  async killTerminalProcess(): Promise<void> {
+    if (!mcpServer || !mcpConnected) return;
+    try {
+      console.log('[jetbrains_agent] Sending Ctrl+C to terminal');
+      await mcpServer.callTool('execute_terminal_command', {
+        command: '\x03',
+        reuseExistingTerminalWindow: true,
+        timeout: 3000,
+      });
+    } catch (e) {
+      console.log('[jetbrains_agent] Terminal kill attempt:', e);
+    }
+  }
+
+  async process(prompt: string, signal?: AbortSignal, readOnly = false): Promise<JetBrainsResult> {
     const cli = getCliTool();
     const sessionHint = this.hasActiveSession
       ? `\n[CONTEXT: A coding CLI session already exists. Use ${cli.continueFlag} flag for any coding commands.]`
       : '\n[CONTEXT: No coding CLI session yet. Do NOT use the continue flag for the first coding command.]';
-    const augmentedPrompt = prompt + sessionHint;
+    const modeHint = readOnly ? '\n[MODE: READ-ONLY — do NOT write, edit, create files or run coding CLI.]' : '';
+    const augmentedPrompt = prompt + sessionHint + modeHint;
 
     console.log(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);
 
@@ -169,8 +218,8 @@ export class JetBrainsAgent {
     }
 
     try {
-      const agent = await getAgent();
-      const result = await run(agent, augmentedPrompt);
+      const agent = await getAgent(readOnly);
+      const result = await run(agent, augmentedPrompt, { signal });
       
       const toolCalls = result.newItems
         .filter((item: any) => item.type === 'tool_call_item')
@@ -190,6 +239,16 @@ export class JetBrainsAgent {
         received_prompt: prompt
       };
     } catch (error) {
+      if (signal?.aborted) {
+        console.log(`[jetbrains_agent] Interrupted by user`);
+        await this.killTerminalProcess();
+        return {
+          agent: 'jetbrains',
+          status: 'error',
+          message: 'Interrupted by user',
+          received_prompt: prompt
+        };
+      }
       console.error('[jetbrains_agent] Error:', error);
       return {
         agent: 'jetbrains',

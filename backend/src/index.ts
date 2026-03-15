@@ -16,6 +16,7 @@ dotenv.config({ path: envPath, override: true });
 // Dynamic imports so env vars are available when agent modules load
 const { XAIVoiceClient } = await import('./xai-realtime.js');
 const { OrchestratorAgent, BrowserAgent, JetBrainsAgent } = await import('./agents/index.js');
+const { createSignal, abortAll, cleanup, isStopCommand } = await import('./interrupt.js');
 
 const XAI_API_KEY = process.env.OPENAI_API_KEY || process.env.XAI_API_KEY;
 const PORT = parseInt(process.env.PORT || '5000');
@@ -26,6 +27,7 @@ const io = new Server(httpServer, {
   cors: { origin: '*' },
 });
 const statusMap = new Map<string, string>();
+const readOnlyMap = new Map<string, boolean>();
 const xaiClients = new Map<string, InstanceType<typeof XAIVoiceClient>>();
 
 const orchestratorAgent = new OrchestratorAgent(XAI_API_KEY || '');
@@ -38,18 +40,28 @@ function log(message: string, sid?: string): void {
 }
 
 async function processWithOrchestrator(transcription: string, sid: string): Promise<void> {
-  log(`[orchestrator] Processing transcription, text_len=${transcription.length}`, sid);
+  if (isStopCommand(transcription)) {
+    log(`[interrupt] Stop command detected`, sid);
+    abortAll(sid);
+    jetbrainsAgent.killTerminalProcess();
+    io.to(sid).emit('agents_stopped', { message: 'All agents stopped.' });
+    return;
+  }
 
-  const result = await orchestratorAgent.process(transcription);
+  const isReadOnly = readOnlyMap.get(sid) ?? true;
+  log(`[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}`, sid);
+
+  const result = await orchestratorAgent.process(transcription, isReadOnly);
 
   log(`[orchestrator] Generated ${result.prompts.length} prompts`, sid);
   io.to(sid).emit('transcription_result', result);
 
   for (const promptInfo of result.prompts) {
+    const signal = createSignal(sid);
     if (promptInfo.agent === 'browser') {
-      runBrowserCommand(promptInfo.prompt, sid);
+      runBrowserCommand(promptInfo.prompt, sid, signal, isReadOnly);
     } else if (promptInfo.agent === 'jetbrains') {
-      jetbrainsAgent.process(promptInfo.prompt).then((result) => {
+      jetbrainsAgent.process(promptInfo.prompt, signal, isReadOnly).then((result) => {
         io.to(sid).emit('ide_result', result);
       }).catch((error) => {
         log(`[jetbrains_agent] Error: ${error}`, sid);
@@ -59,10 +71,10 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
   }
 }
 
-function runBrowserCommand(prompt: string, sid: string): void {
+function runBrowserCommand(prompt: string, sid: string, signal?: AbortSignal, readOnly?: boolean): void {
   log(`[browser_agent] Processing command: ${prompt}`, sid);
   browserAgent
-    .process(prompt)
+    .process(prompt, signal, readOnly)
     .then((result) => {
       io.to(sid).emit('browser_result', result);
     })
@@ -76,6 +88,11 @@ io.on('connection', (socket) => {
   const sid = socket.id;
 
   log('[socketio] Client connected', sid);
+
+  socket.on('set_read_only', (value: boolean) => {
+    readOnlyMap.set(sid, !!value);
+    log(`[socketio] Read-only mode set to ${!!value}`, sid);
+  });
 
   socket.on('start_transcription_stream', async () => {
     if (!XAI_API_KEY) {
@@ -160,8 +177,17 @@ io.on('connection', (socket) => {
     statusMap.delete(sid);
   });
 
+  socket.on('stop_all', () => {
+    log('[socketio] stop_all received', sid);
+    abortAll(sid);
+    jetbrainsAgent.killTerminalProcess();
+    socket.emit('agents_stopped', { message: 'All agents stopped.' });
+  });
+
   socket.on('disconnect', () => {
     log('[socketio] Client disconnected', sid);
+    abortAll(sid);
+    cleanup(sid);
     const xaiClient = xaiClients.get(sid);
     if (xaiClient) {
       log('[x.ai] Closing connection due to client disconnect', sid);
@@ -169,6 +195,7 @@ io.on('connection', (socket) => {
       xaiClients.delete(sid);
     }
     statusMap.delete(sid);
+    readOnlyMap.delete(sid);
   });
 });
 

@@ -1,13 +1,7 @@
 import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/agents';
 import { MCPServerStdio } from '@openai/agents';
 import type { BrowserResult } from '../types';
-
-// Read env vars lazily to ensure dotenv has loaded
-const getXAIConfig = () => ({
-  apiKey: process.env.OPENAI_API_KEY || '',
-  baseURL: process.env.OPENAI_BASE_URL || 'https://api.x.ai/v1',
-  model: process.env.OPENAI_MODEL || 'grok-4-1-fast-non-reasoning',
-});
+import { getXAIConfig } from './config.js';
 
 const PLAYWRIGHT_MCP_CONFIG = {
   command: 'npx',
@@ -38,6 +32,27 @@ When the user asks to browse, search, or interact with a webpage:
 
 Always provide feedback on what actions were taken.`;
 
+const getBrowserInstructions = (readOnly = false) => {
+  if (readOnly) {
+    return `You are a browser automation agent using Playwright in READ-ONLY mode.
+
+You can ONLY perform read/view operations:
+- Navigate to URLs
+- Take screenshots
+- Extract page content
+- Scroll pages
+
+STRICTLY FORBIDDEN in read-only mode:
+- NEVER click elements, fill forms, or submit data
+- NEVER execute JavaScript that modifies page state
+- If the user asks to interact (click, fill, submit), respond: "Cannot interact with page — read-only mode is active. Toggle edit mode to allow interactions."
+
+Always provide feedback on what actions were taken.`;
+  }
+
+  return BROWSER_AGENT_INSTRUCTIONS;
+};
+
 let mcpServer: MCPServerStdio | null = null;
 let browserAgent: Agent | null = null;
 let clientInitialized = false;
@@ -58,7 +73,7 @@ function initializeClient(): void {
   console.log('[browser_agent] OpenAI provider initialized with x.ai (chat completions), baseURL:', config.baseURL);
 }
 
-async function getAgent(): Promise<Agent> {
+async function getAgent(readOnly = false): Promise<Agent> {
   initializeClient();
   
   if (!mcpServer) {
@@ -74,14 +89,12 @@ async function getAgent(): Promise<Agent> {
     console.log('[browser_agent] MCP server connected');
   }
 
-  if (!browserAgent) {
-    browserAgent = new Agent({
-      name: 'Browser Agent',
-      instructions: BROWSER_AGENT_INSTRUCTIONS,
-      mcpServers: [mcpServer],
-      model: getXAIConfig().model
-    });
-  }
+  browserAgent = new Agent({
+    name: 'Browser Agent',
+    instructions: getBrowserInstructions(readOnly),
+    mcpServers: [mcpServer],
+    model: getXAIConfig().model
+  });
 
   return browserAgent;
 }
@@ -94,8 +107,7 @@ export class BrowserAgent {
     if (this.initialized) return;
     
     try {
-      const agent = await getAgent();
-      await agent;
+      await getAgent(false);
       this.initialized = true;
       console.log('[browser_agent] Initialized successfully');
     } catch (error) {
@@ -105,8 +117,8 @@ export class BrowserAgent {
     }
   }
 
-  async process(prompt: string): Promise<BrowserResult> {
-    console.log(`[browser_agent] Received prompt: ${prompt}`);
+  async process(prompt: string, signal?: AbortSignal, readOnly = false): Promise<BrowserResult> {
+    console.log(`[browser_agent] Received prompt: ${prompt} (readOnly=${readOnly})`);
 
     if (!this.initialized) {
       try {
@@ -121,14 +133,17 @@ export class BrowserAgent {
     }
 
     try {
-      const agent = await getAgent();
-      const result = await run(agent, prompt);
+      const agent = await getAgent(readOnly);
+      const result = await run(agent, prompt, { signal });
       
       return {
         status: 'success',
         message: result.finalOutput || 'Browser command executed successfully',
       };
     } catch (error) {
+      if (signal?.aborted) {
+        return { status: 'error', message: 'Interrupted by user' };
+      }
       console.error('[browser_agent] Error:', error);
       return {
         status: 'error',

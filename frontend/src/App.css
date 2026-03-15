@@ -80,18 +80,24 @@ body {
   50% { opacity: 0.3; }
 }
 
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .mic-toggle {
   background: transparent;
   border: 2px solid #555;
   border-radius: 50%;
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.2s ease;
   color: #666;
 }
 
@@ -107,6 +113,32 @@ body {
 }
 
 .mic-toggle:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.stop-button {
+  background: transparent;
+  border: 2px solid #555;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  transition: all 0.2s ease;
+}
+
+.stop-button:hover:not(:disabled) {
+  border-color: #f44336;
+  color: #f44336;
+  background-color: rgba(244, 67, 54, 0.1);
+}
+
+.stop-button:disabled {
   opacity: 0.3;
   cursor: not-allowed;
 }
@@ -195,6 +227,11 @@ body {
   font-size: 13px;
 }
 
+.conversation-line.system .conversation-text {
+  color: #f44336;
+  font-style: italic;
+}
+
 .error {
   color: #ff5f56;
   font-size: 13px;
@@ -242,4 +279,63 @@ body {
 .no-commands {
   color: #555;
   font-size: 14px;
+}
+
+/* Read-only toggle button */
+.readonly-toggle {
+  background: transparent;
+  border: 2px solid #555;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  transition: all 0.2s ease;
+}
+
+.readonly-toggle:hover {
+  border-color: #888;
+  color: #888;
+}
+
+.readonly-toggle.active {
+  border-color: #ff9800;
+  color: #ff9800;
+  background-color: rgba(255, 152, 0, 0.1);
+}
+
+/* Read-only mode: disable text selection & editing in content */
+.App.read-only .terminal-body {
+  user-select: none;
+  pointer-events: none;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.App.read-only .content {
+  position: relative;
+}
+
+.App.read-only .content::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  cursor: not-allowed;
+}
+
+/* Read-only badge in status bar */
+.readonly-badge {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 2px 8px;
+  background-color: rgba(255, 152, 0, 0.2);
+  color: #ff9800;
+  border: 1px solid #ff9800;
+  border-radius: 4px;
 }
