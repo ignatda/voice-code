@@ -4,15 +4,18 @@ import type { JetBrainsResult } from '../types';
 import { getXAIConfig } from './config.js';
 import { log, logError } from '../log.js';
 
+const KIRO_WRAPPER = new URL('../scripts/kiro-wrapper.sh', import.meta.url).pathname;
+const OPENCODE_WRAPPER = new URL('../scripts/opencode-wrapper.sh', import.meta.url).pathname;
+
 const CLI_TOOLS: Record<string, { bin: string; run: string; continueFlag: string }> = {
   opencode: {
-    bin: '/home/dsherstobitov/.opencode/bin/opencode',
-    run: 'run',
+    bin: OPENCODE_WRAPPER,
+    run: '--auto-open-files --validate-build run',
     continueFlag: '-c',
   },
   'kiro-cli': {
-    bin: '/home/dsherstobitov/.local/bin/kiro-cli',
-    run: 'chat --no-interactive --trust-all-tools --model claude-opus-4.6',
+    bin: KIRO_WRAPPER,
+    run: '--auto-open-files --validate-build chat --no-interactive --trust-all-tools --model claude-opus-4.6',
     continueFlag: '--resume',
   },
 };
@@ -70,7 +73,15 @@ ${readOnly ? `
 - For IDE navigation/reading tasks, use MCP tools directly.`}
 
 - NEVER ask clarifying questions. Use available tools to discover information.
-- Use ${cli.continueFlag} on every CLI command EXCEPT the very first one in a conversation.`;
+- Use ${cli.continueFlag} on every CLI command EXCEPT the very first one in a conversation.
+
+## Post-CLI IDE Actions (wrapper integration):
+When CLI output contains a \`KIRO_IDE_ACTIONS_BEGIN\` / \`KIRO_IDE_ACTIONS_END\` or \`OPENCODE_IDE_ACTIONS_BEGIN\` / \`OPENCODE_IDE_ACTIONS_END\` block, parse the JSON inside and execute each action in order:
+- \`"open:<path>"\` → call open_file_in_editor for that file
+- \`"reformat:<path>"\` → call reformat_file for that file
+- \`"build"\` → call build_project, include errors/warnings in your response
+- \`"problems:<path>"\` → call get_file_problems for that file, report any issues
+Execute all actions sequentially after the CLI finishes. Include results in your final response.`;
 };
 
 let mcpServer: MCPServerStdio | null = null;
