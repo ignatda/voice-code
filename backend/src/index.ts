@@ -173,6 +173,14 @@ io.on('connection', (socket) => {
     statusMap.delete(sid);
   });
 
+  socket.on('manual_prompt', (text: string) => {
+    if (!text?.trim()) return;
+    log(`[socketio] Manual prompt received, len=${text.length}`, sid);
+    statusMap.set(sid, 'executing');
+    socket.emit('status', { status: 'executing' });
+    processWithOrchestrator(text.trim(), sid);
+  });
+
   socket.on('stop_all', () => {
     log('[socketio] stop_all received', sid);
     abortAll(sid);

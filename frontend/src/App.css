@@ -421,3 +421,52 @@ body {
 .markdown-body em {
   color: #b0b0b0;
 }
+
+.prompt-bar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 24px;
+  background-color: #252525;
+  border-top: 1px solid #333;
+}
+
+.prompt-input {
+  flex: 1;
+  padding: 10px 14px;
+  background-color: #0d0d0d;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
+  font-size: 14px;
+  outline: none;
+}
+
+.prompt-input:focus {
+  border-color: #555;
+}
+
+.prompt-input:disabled {
+  opacity: 0.5;
+}
+
+.prompt-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  background-color: #333;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #e0e0e0;
+  cursor: pointer;
+}
+
+.prompt-send:hover:not(:disabled) {
+  background-color: #444;
+}
+
+.prompt-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

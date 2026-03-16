@@ -12,6 +12,7 @@ function App() {
   const [conversationItems, setConversationItems] = useState([]);
   const [error, setError] = useState('');
   const [readOnly, setReadOnly] = useState(() => localStorage.getItem('readOnlyMode') === 'true');
+  const [promptText, setPromptText] = useState('');
 
   const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
@@ -216,6 +217,14 @@ function App() {
     });
   };
 
+  const submitPrompt = () => {
+    const text = promptText.trim();
+    if (!text || !socketRef.current?.connected) return;
+    setConversationItems(prev => [...prev, { type: 'user', text }]);
+    socketRef.current.emit('manual_prompt', text);
+    setPromptText('');
+  };
+
   const getStatusText = () => {
     switch (status) {
       case 'listening': return 'Listening';
@@ -309,6 +318,28 @@ function App() {
           <div ref={conversationEndRef} />
         </div>
       </main>
+
+      <div className="prompt-bar">
+        <input
+          type="text"
+          className="prompt-input"
+          placeholder="Type a prompt..."
+          value={promptText}
+          onChange={e => setPromptText(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && submitPrompt()}
+          disabled={!isConnected}
+        />
+        <button
+          className="prompt-send"
+          onClick={submitPrompt}
+          disabled={!isConnected || !promptText.trim()}
+          title="Send prompt"
+        >
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
+        </button>
+      </div>
 
     </div>
   );
