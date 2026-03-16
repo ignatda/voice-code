@@ -49,7 +49,15 @@ function App() {
 
     socketRef.current.on('status', (data) => setStatus(data.status));
 
-    socketRef.current.on('session_list', (list) => setSessionList(list));
+    socketRef.current.on('session_list', (list) => {
+      setSessionList(list);
+      setActiveSessionId(prev => {
+        if (!prev && list.length > 0) {
+          socketRef.current.emit('switch_session', list[0].id);
+        }
+        return prev;
+      });
+    });
     socketRef.current.on('session_switched', handleSessionSwitched);
     socketRef.current.on('session_deleted', (id) => {
       if (id === activeSessionId) {

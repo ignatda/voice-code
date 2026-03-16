@@ -125,7 +125,7 @@ function createSession(): Session {
 function getSessionName(session: Session): string {
   const firstText = session.items.find(i => i.type === 'user')?.text;
   if (!firstText) return 'New session';
-  return firstText.length > 10 ? firstText.slice(0, 10) + '...' : firstText;
+  return firstText.length > 20 ? firstText.slice(0, 20) + '...' : firstText;
 }
 
 function getSessionList() {
