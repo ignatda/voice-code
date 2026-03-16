@@ -223,6 +223,8 @@ function App() {
     setConversationItems(prev => [...prev, { type: 'user', text }]);
     socketRef.current.emit('manual_prompt', text);
     setPromptText('');
+    const ta = document.querySelector('.prompt-input');
+    if (ta) ta.style.height = 'auto';
   };
 
   const getStatusText = () => {
@@ -320,13 +322,22 @@ function App() {
       </main>
 
       <div className="prompt-bar">
-        <input
-          type="text"
+        <textarea
           className="prompt-input"
           placeholder="Type a prompt..."
           value={promptText}
-          onChange={e => setPromptText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && submitPrompt()}
+          rows={1}
+          onChange={e => {
+            setPromptText(e.target.value);
+            e.target.style.height = 'auto';
+            e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px';
+          }}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              submitPrompt();
+            }
+          }}
           disabled={!isConnected}
         />
         <button

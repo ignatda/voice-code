@@ -6,7 +6,7 @@ import { log, logError } from '../log.js';
 
 const PLAYWRIGHT_MCP_CONFIG = {
   command: 'npx',
-  args: ['-y', '@playwright/mcp'],
+  args: ['-y', '@playwright/mcp', '--image-responses', 'omit'],
   env: {
     ...process.env,
     DISPLAY: process.env.DISPLAY || ':0',
@@ -18,7 +18,7 @@ const BROWSER_AGENT_INSTRUCTIONS = `You are a browser automation agent using Pla
 
 You have access to browser automation tools via MCP. Use these tools to:
 - Navigate to URLs
-- Take screenshots
+- Take accessibility snapshots of pages (browser_snapshot)
 - Click elements
 - Fill forms
 - Extract page content
@@ -26,9 +26,9 @@ You have access to browser automation tools via MCP. Use these tools to:
 - Scroll pages
 
 When the user asks to browse, search, or interact with a webpage:
-1. Use playwright_navigate to go to the URL
-2. Use playwright_screenshot to see the page
-3. Use playwright_click, playwright_fill, or other tools to interact
+1. Use browser_navigate to go to the URL
+2. Use browser_snapshot to see the page structure (preferred over screenshots)
+3. Use browser_click, browser_fill_form, or other tools to interact
 4. Report results back
 
 Always provide feedback on what actions were taken.`;
@@ -39,7 +39,7 @@ const getBrowserInstructions = (readOnly = false) => {
 
 You can ONLY perform read/view operations:
 - Navigate to URLs
-- Take screenshots
+- Take accessibility snapshots of pages (browser_snapshot)
 - Extract page content
 - Scroll pages
 

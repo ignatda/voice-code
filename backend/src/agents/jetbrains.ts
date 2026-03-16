@@ -12,7 +12,7 @@ const CLI_TOOLS: Record<string, { bin: string; run: string; continueFlag: string
   },
   'kiro-cli': {
     bin: '/home/dsherstobitov/.local/bin/kiro-cli',
-    run: 'chat --no-interactive --trust-all-tools',
+    run: 'chat --no-interactive --trust-all-tools --model claude-opus-4.6',
     continueFlag: '--resume',
   },
 };

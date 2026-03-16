@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multiline Textarea</title>
+  <style>
+    body { font-family: sans-serif; max-width: 500px; margin: 40px auto; }
+    textarea { width: 100%; min-height: 80px; font: inherit; padding: 8px; box-sizing: border-box; resize: vertical; }
+    button { margin-top: 8px; padding: 8px 16px; }
+  </style>
+</head>
+<body>
+  <form id="form">
+    <textarea id="input" placeholder="Shift+Enter for new line, Enter to submit"></textarea>
+    <button type="submit">Submit</button>
+  </form>
+  <script>
+    const textarea = document.getElementById('input');
+    const form = document.getElementById('form');
+
+    textarea.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      if (e.shiftKey) {
+        e.preventDefault();
+        const { selectionStart, selectionEnd } = textarea;
+        textarea.setRangeText('\n', selectionStart, selectionEnd, 'end');
+      } else {
+        e.preventDefault();
+        form.requestSubmit();
+      }
+    });
+
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const text = textarea.value.trim();
+      if (!text) return;
+      console.log('Submitted:', text);
+      alert('Submitted:\n' + text);
+      textarea.value = '';
+    });
+  </script>
+</body>
+</html>

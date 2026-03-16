@@ -370,6 +370,7 @@ body {
 .markdown-body a {
   color: #58a6ff;
   text-decoration: none;
+  cursor: pointer;
 }
 
 .markdown-body a:hover {
@@ -424,6 +425,7 @@ body {
 
 .prompt-bar {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
   padding: 12px 24px;
   background-color: #252525;
@@ -440,6 +442,10 @@ body {
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
   font-size: 14px;
   outline: none;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.4;
+  max-height: 150px;
 }
 
 .prompt-input:focus {
