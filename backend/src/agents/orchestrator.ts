@@ -13,7 +13,7 @@ Available agents:
 
 Routing rules:
 - Planning/design requests (e.g. "plan", "design", "think about", "how should we", "let's discuss", "what's the best way to", "new feature", "let's plan") → **planner** ONLY (do NOT also route to jetbrains)
-- Implementation triggers (e.g. "implement it", "do it", "let's go", "execute", "make it", "build it", "go ahead") when a plan was previously discussed → **jetbrains** with prompt: "Implement the following plan:\\n<the plan from planner>"
+- Implementation triggers (e.g. "implement it", "do it", "let's go", "execute", "make it", "build it", "go ahead") when a plan was previously discussed → **jetbrains** (the plan will be provided in a separate system message; if no plan exists yet, route to **planner** instead)
 - Direct IDE actions (open, search, navigate, run, simple edits) → **jetbrains**
 - Web/browser actions → **browser**
 - Refinement of an existing plan (e.g. "also add logging", "skip the tests", "change step 2") → **planner**

@@ -13,7 +13,7 @@ Rules:
 - Include file paths when known
 - Do NOT write actual code — only describe what needs to be done
 - Keep plans minimal — fewest steps possible
-- If the request is vague, make reasonable assumptions and state them
+- If the request is vague or no specific feature is described, ask the user what they want to build. Start with a brief greeting like "Ready to plan! What feature would you like to build?" and optionally suggest clarifying questions.
 - Use English regardless of input language
 `;
 
