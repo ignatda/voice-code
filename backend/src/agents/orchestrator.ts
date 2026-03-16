@@ -33,7 +33,8 @@ Output format (JSON):
 
 Rules:
 - If the user mentions browsing, searching, opening a website, reading web content, watching videos, video playback, scrolling, clicking, closing tabs, or any web/navigation action → include browser agent
-- If the user mentions coding, files, IDE, running code, project management, code review, improvements, refactoring, analysis, or anything related to the codebase → include jetbrains agent
+- If the user asks to plan, design, discuss, or think about a feature or architecture → include ONLY planner agent (NOT jetbrains, even if they mention code/files/IDE)
+- If the user mentions coding, files, IDE, running code, or codebase actions AND is NOT planning/designing → include jetbrains agent
 - If the speech is just a greeting with no actionable request (e.g. "hello", "hi") → prompts array can be empty
 - When in doubt between planner and jetbrains: if the user is describing what to build → **planner**; if the user is asking to do a specific action right now → **jetbrains**. Prefer generating a prompt over returning empty.
 - Always preserve the original transcribed text exactly
