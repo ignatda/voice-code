@@ -156,7 +156,7 @@ const plannerAgent = new PlannerAgent(XAI_API_KEY || '');
 const pendingPlans = new Map<string, string>(); // sessionId → plan markdown
 const plannerMode = new Map<string, boolean>(); // sessionId → whether planner session is active
 
-const STOP_SCRIPT = path.resolve(__dirname, '..', 'stop.sh');
+const STOP_SCRIPT = path.resolve(__dirname, '..', 'src', 'scripts', 'stop.sh');
 
 function killAll(sid: string): void {
   abortAll(sid);
