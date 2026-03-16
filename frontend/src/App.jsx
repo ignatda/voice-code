@@ -105,7 +105,7 @@ function App() {
 
     socketRef.current.on('ide_result', (data) => {
       const text = data.message || 'No response';
-      setConversationItems(prev => [...prev, { type: 'agent', agent: 'jetbrains', text }]);
+      setConversationItems(prev => [...prev, { type: 'agent', agent: data.agent || 'jetbrains', text }]);
     });
 
     socketRef.current.on('transcription_stopped', () => {});
