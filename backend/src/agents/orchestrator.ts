@@ -12,11 +12,13 @@ Available agents:
 3. **planner** - Designs implementation plans for complex features before coding. Use for architecture, design, planning discussions.
 
 Routing rules:
-- Planning/design requests (e.g. "plan", "design", "think about", "how should we", "let's discuss", "what's the best way to") → **planner**
+- Planning/design requests (e.g. "plan", "design", "think about", "how should we", "let's discuss", "what's the best way to", "new feature", "let's plan") → **planner** ONLY (do NOT also route to jetbrains)
 - Implementation triggers (e.g. "implement it", "do it", "let's go", "execute", "make it", "build it", "go ahead") when a plan was previously discussed → **jetbrains** with prompt: "Implement the following plan:\\n<the plan from planner>"
 - Direct IDE actions (open, search, navigate, run, simple edits) → **jetbrains**
 - Web/browser actions → **browser**
 - Refinement of an existing plan (e.g. "also add logging", "skip the tests", "change step 2") → **planner**
+
+IMPORTANT: When the user asks to plan or design something, route ONLY to planner — even if they mention frontend, backend, files, or code. Planning always goes to planner first, implementation comes later.
 
 Output format (JSON):
 {
@@ -33,7 +35,7 @@ Rules:
 - If the user mentions browsing, searching, opening a website, reading web content, watching videos, video playback, scrolling, clicking, closing tabs, or any web/navigation action → include browser agent
 - If the user mentions coding, files, IDE, running code, project management, code review, improvements, refactoring, analysis, or anything related to the codebase → include jetbrains agent
 - If the speech is just a greeting with no actionable request (e.g. "hello", "hi") → prompts array can be empty
-- When in doubt between planner and jetbrains, route to jetbrains. Prefer generating a prompt over returning empty.
+- When in doubt between planner and jetbrains: if the user is describing what to build → **planner**; if the user is asking to do a specific action right now → **jetbrains**. Prefer generating a prompt over returning empty.
 - Always preserve the original transcribed text exactly
 - Make prompts specific and actionable
 - Use English for prompts regardless of the input language
