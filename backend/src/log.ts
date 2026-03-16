@@ -1,11 +1,15 @@
-const ts = () => new Date().toISOString().split('T')[1].slice(0, -1);
+import pino from 'pino';
 
-export function log(message: string, sid?: string): void {
-  const prefix = `[${ts()}]`;
-  console.log(sid ? `${prefix} ${message}, sid=${sid.slice(0, 8)}` : `${prefix} ${message}`);
-}
+const isDev = process.env.NODE_ENV !== 'production';
 
-export function logError(message: string, sid?: string): void {
-  const prefix = `[${ts()}]`;
-  console.error(sid ? `${prefix} ${message}, sid=${sid.slice(0, 8)}` : `${prefix} ${message}`);
-}
+const logger = pino({
+  level: process.env.LOG_LEVEL || (isDev ? 'debug' : 'info'),
+  ...(isDev && {
+    transport: {
+      target: 'pino-pretty',
+      options: { colorize: true, translateTime: 'HH:MM:ss.l', ignore: 'pid,hostname' },
+    },
+  }),
+});
+
+export default logger;

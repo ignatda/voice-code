@@ -2,7 +2,7 @@ import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/age
 import { MCPServerStdio } from '@openai/agents';
 import type { BrowserResult } from '../types';
 import { getXAIConfig } from './config.js';
-import { log, logError } from '../log.js';
+import logger from '../log.js';
 
 const PLAYWRIGHT_MCP_CONFIG = {
   command: 'npx',
@@ -71,7 +71,7 @@ function initializeClient(): void {
   
   setDefaultModelProvider(provider);
   clientInitialized = true;
-  log('[browser_agent] OpenAI provider initialized with x.ai (chat completions), baseURL: ' + config.baseURL);
+  logger.info('[browser_agent] OpenAI provider initialized with x.ai (chat completions), baseURL: ' + config.baseURL);
 }
 
 async function getAgent(readOnly = false): Promise<Agent> {
@@ -87,7 +87,7 @@ async function getAgent(readOnly = false): Promise<Agent> {
   if (!mcpConnected) {
     await mcpServer.connect();
     mcpConnected = true;
-    log('[browser_agent] MCP server connected');
+    logger.info('[browser_agent] MCP server connected');
   }
 
   browserAgent = new Agent({
@@ -110,16 +110,16 @@ export class BrowserAgent {
     try {
       await getAgent(false);
       this.initialized = true;
-      log('[browser_agent] Initialized successfully');
+      logger.info('[browser_agent] Initialized successfully');
     } catch (error) {
       this.initError = String(error);
-      logError(`[browser_agent] Initialization error: ${error}`);
+      logger.error(`[browser_agent] Initialization error: ${error}`);
       throw error;
     }
   }
 
   async process(prompt: string, signal?: AbortSignal, readOnly = false): Promise<BrowserResult> {
-    log(`[browser_agent] Received prompt: ${prompt} (readOnly=${readOnly})`);
+    logger.info(`[browser_agent] Received prompt: ${prompt} (readOnly=${readOnly})`);
 
     if (!this.initialized) {
       try {
@@ -145,7 +145,7 @@ export class BrowserAgent {
       if (signal?.aborted) {
         return { status: 'error', message: 'Interrupted by user' };
       }
-      logError(`[browser_agent] Error: ${error}`);
+      logger.error(`[browser_agent] Error: ${error}`);
       return {
         status: 'error',
         error: String(error)

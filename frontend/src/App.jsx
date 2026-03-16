@@ -27,31 +27,26 @@ function App() {
     }
 
     socketRef.current.on('connect', () => {
-      console.log('[socket] Connected to backend');
       setIsConnected(true);
       setError('');
       socketRef.current.emit('set_read_only', localStorage.getItem('readOnlyMode') === 'true');
     });
 
     socketRef.current.on('disconnect', () => {
-      console.log('[socket] Disconnected from backend');
       setIsConnected(false);
       setMicEnabled(false);
       setStatus('idle');
     });
 
     socketRef.current.on('status', (data) => {
-      console.log('[socket] Status:', data.status);
       setStatus(data.status);
     });
 
     socketRef.current.on('transcription_started', () => {
-      console.log('[socket] Transcription stream started');
     });
 
     socketRef.current.on('transcription_update', (data) => {
       if (data.type === 'transcript' && data.text) {
-        console.log('[socket] Live transcript:', data.text);
         setConversationItems(prev => {
           if (prev.length > 0 && prev[prev.length - 1].type === 'user' && prev[prev.length - 1].text === data.text) {
             return prev;
@@ -62,7 +57,6 @@ function App() {
     });
 
     socketRef.current.on('transcription_result', (data) => {
-      console.log('[socket] Transcription result:', data);
       if (data.original_text) {
         setConversationItems(prev => {
           if (prev.length > 0 && prev[prev.length - 1].type === 'user' && prev[prev.length - 1].text === data.original_text) {
@@ -80,33 +74,27 @@ function App() {
     });
 
     socketRef.current.on('ready_for_audio', () => {
-      console.log('[socket] Ready for audio');
     });
 
     socketRef.current.on('browser_result', (data) => {
-      console.log('[socket] Browser result:', data);
       const text = data.message || data.error || 'No response';
       setConversationItems(prev => [...prev, { type: 'agent', agent: 'browser', text }]);
     });
 
     socketRef.current.on('ide_result', (data) => {
-      console.log('[socket] IDE result:', data);
       const text = data.message || 'No response';
       setConversationItems(prev => [...prev, { type: 'agent', agent: 'jetbrains', text }]);
     });
 
     socketRef.current.on('transcription_stopped', () => {
-      console.log('[socket] Transcription stopped');
     });
 
-    socketRef.current.on('agents_stopped', (data) => {
-      console.log('[socket] Agents stopped:', data.message);
+    socketRef.current.on('agents_stopped', () => {
       setConversationItems(prev => [...prev, { type: 'system', text: '⛔ All agents stopped.' }]);
       setStatus('idle');
     });
 
     socketRef.current.on('error', (data) => {
-      console.error('[socket] Error:', data.message);
       setError(data.message);
       setMicEnabled(false);
       setStatus('idle');
@@ -176,9 +164,8 @@ function App() {
         audioContextRef.current = { audioContext, workletNode, source };
       });
 
-    } catch (err) {
+    } catch (_) {
       setError('Error accessing microphone.');
-      console.error('[mic] Error:', err);
     }
   };
 

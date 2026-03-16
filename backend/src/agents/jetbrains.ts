@@ -2,7 +2,7 @@ import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/age
 import { MCPServerStdio } from '@openai/agents';
 import type { JetBrainsResult } from '../types';
 import { getXAIConfig } from './config.js';
-import { log, logError } from '../log.js';
+import logger from '../log.js';
 
 const KIRO_WRAPPER = new URL('../scripts/kiro-wrapper.sh', import.meta.url).pathname;
 const OPENCODE_WRAPPER = new URL('../scripts/opencode-wrapper.sh', import.meta.url).pathname;
@@ -101,7 +101,7 @@ function initializeClient(): void {
   
   setDefaultModelProvider(provider);
   clientInitialized = true;
-  log('[jetbrains_agent] OpenAI provider initialized with x.ai (chat completions), baseURL: ' + config.baseURL);
+  logger.info('[jetbrains_agent] OpenAI provider initialized with x.ai (chat completions), baseURL: ' + config.baseURL);
 }
 
 async function getAgent(readOnly = false): Promise<Agent> {
@@ -117,7 +117,7 @@ async function getAgent(readOnly = false): Promise<Agent> {
   if (!mcpConnected) {
     await mcpServer.connect();
     mcpConnected = true;
-    log('[jetbrains_agent] MCP server connected');
+    logger.info('[jetbrains_agent] MCP server connected');
   }
 
   // Recreate agent each time — instructions depend on readOnly mode
@@ -143,10 +143,10 @@ export class JetBrainsAgent {
     try {
       await getAgent(false);
       this.initialized = true;
-      log('[jetbrains_agent] Initialized successfully');
+      logger.info('[jetbrains_agent] Initialized successfully');
     } catch (error) {
       this.initError = String(error);
-      logError(`[jetbrains_agent] Initialization error: ${error}`);
+      logger.error(`[jetbrains_agent] Initialization error: ${error}`);
       throw error;
     }
   }
@@ -154,14 +154,14 @@ export class JetBrainsAgent {
   async killTerminalProcess(): Promise<void> {
     if (!mcpServer || !mcpConnected) return;
     try {
-      log('[jetbrains_agent] Sending Ctrl+C to terminal');
+      logger.info('[jetbrains_agent] Sending Ctrl+C to terminal');
       await mcpServer.callTool('execute_terminal_command', {
         command: '\x03',
         reuseExistingTerminalWindow: true,
         timeout: 3000,
       });
     } catch (e) {
-      log(`[jetbrains_agent] Terminal kill attempt: ${e}`);
+      logger.info(`[jetbrains_agent] Terminal kill attempt: ${e}`);
     }
   }
 
@@ -173,7 +173,7 @@ export class JetBrainsAgent {
     const modeHint = readOnly ? '\n[MODE: READ-ONLY — do NOT write, edit, create files or run coding CLI.]' : '';
     const augmentedPrompt = prompt + sessionHint + modeHint;
 
-    log(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);
+    logger.info(`[jetbrains_agent] Received prompt: ${prompt} (hasActiveSession=${this.hasActiveSession})`);
 
     if (!this.initialized) {
       try {
@@ -199,13 +199,13 @@ export class JetBrainsAgent {
         .filter((item: any) => item.type === 'tool_call_item')
         .map((item: any) => item.rawItem?.name || 'unknown');
       if (toolCalls.length > 0) {
-        log(`[jetbrains_agent] Tools used: ${toolCalls.join(', ')}`);
+        logger.info(`[jetbrains_agent] Tools used: ${toolCalls.join(', ')}`);
       }
 
       this.hasActiveSession = true;
       this.conversationHistory = result.history.slice(-40);
       const message = result.finalOutput || 'Command executed successfully';
-      log(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
+      logger.info(`[jetbrains_agent] Completed: ${message.slice(0, 200)}`);
 
       return {
         agent: 'jetbrains',
@@ -215,7 +215,7 @@ export class JetBrainsAgent {
       };
     } catch (error) {
       if (signal?.aborted) {
-        log(`[jetbrains_agent] Interrupted by user`);
+        logger.info('[jetbrains_agent] Interrupted by user');
         await this.killTerminalProcess();
         return {
           agent: 'jetbrains',
@@ -224,7 +224,7 @@ export class JetBrainsAgent {
           received_prompt: prompt
         };
       }
-      logError(`[jetbrains_agent] Error: ${error}`);
+      logger.error(`[jetbrains_agent] Error: ${error}`);
       return {
         agent: 'jetbrains',
         status: 'error',

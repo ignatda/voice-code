@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { OrchestratorResult } from '../types';
-import { logError } from '../log.js';
+import logger from '../log.js';
 
 const ORCHESTRATOR_SYSTEM_PROMPT = `You are an Orchestrator Agent for a voice-controlled IDE.
 
@@ -99,7 +99,7 @@ export class OrchestratorAgent {
       });
       translatedText = translationResponse.choices[0]?.message?.content?.trim() || transcription;
     } catch (error) {
-      logError(`[orchestrator] Translation error: ${error}`);
+      logger.error(`[orchestrator] Translation error: ${error}`);
     }
 
     const sessionHistory = sid ? (this.history.get(sid) || []) : [];
@@ -142,7 +142,7 @@ export class OrchestratorAgent {
         prompts: result.prompts || [],
       };
     } catch (error) {
-      logError(`[orchestrator] Error: ${error}`);
+      logger.error(`[orchestrator] Error: ${error}`);
       return {
         original_text: transcription,
         prompts: [],

@@ -1,6 +1,6 @@
 import WebSocket from 'ws';
 import type { XAIWebSocketMessage, SessionConfig } from './types';
-import { log, logError } from './log.js';
+import logger from './log.js';
 
 const XAI_REALTIME_URL = 'wss://us-east-1.api.x.ai/v1/realtime';
 
@@ -42,7 +42,7 @@ export class XAIVoiceClient {
       });
 
       this.ws.on('open', () => {
-        log(`[x.ai] Connected to Voice Agent API`, this.sessionSid);
+        logger.info({ sid: this.sessionSid }, '[x.ai] Connected to Voice Agent API');
         this.isConnected = true;
         this.sendSessionConfig();
         resolve();
@@ -53,7 +53,7 @@ export class XAIVoiceClient {
       });
 
       this.ws.on('error', (error) => {
-        logError(`[x.ai] WebSocket error: ${error}`, this.sessionSid);
+        logger.error({ sid: this.sessionSid }, `[x.ai] WebSocket error: ${error}`);
         if (this.onError) {
           this.onError(error.message);
         }
@@ -61,7 +61,7 @@ export class XAIVoiceClient {
       });
 
       this.ws.on('close', () => {
-        log(`[x.ai] Connection closed`, this.sessionSid);
+        logger.info({ sid: this.sessionSid }, '[x.ai] Connection closed');
         this.isConnected = false;
       });
     });
@@ -100,19 +100,19 @@ export class XAIVoiceClient {
 
       const LOGGED = ['input_audio_buffer.speech_started', 'session.updated', 'error'];
       if (LOGGED.includes(type)) {
-        log(`[x.ai → backend] type=${type}`, this.sessionSid);
+        logger.info({ sid: this.sessionSid }, `[x.ai → backend] type=${type}`);
       }
 
       switch (type) {
         case 'input_audio_buffer.speech_started':
-          log(`[x.ai] Speech started`, this.sessionSid);
+          logger.info({ sid: this.sessionSid }, '[x.ai] Speech started');
           if (this.onStatusChange) {
             this.onStatusChange('speaking');
           }
           break;
 
         case 'input_audio_buffer.speech_stopped':
-          log(`[x.ai] Speech stopped`, this.sessionSid);
+          logger.info({ sid: this.sessionSid }, '[x.ai] Speech stopped');
           break;
 
         case 'conversation.item.added': {
@@ -122,7 +122,7 @@ export class XAIVoiceClient {
             for (const c of content) {
               if (c?.type === 'input_audio' && c?.transcript) {
                 const transcript = c.transcript;
-                log(`[x.ai → backend] Transcript: '${transcript}'`, this.sessionSid);
+                logger.info({ sid: this.sessionSid }, `[x.ai → backend] Transcript: '${transcript}'`);
                 if (this.onTranscription) {
                   this.onTranscription(transcript);
                 }
@@ -135,34 +135,34 @@ export class XAIVoiceClient {
         case 'conversation.item.input_audio_transcription.completed': {
           const transcript = message.item?.content?.[0]?.transcript;
           if (transcript) {
-            log(`[x.ai → backend] Final transcript: '${transcript}'`, this.sessionSid);
+            logger.info({ sid: this.sessionSid }, `[x.ai → backend] Final transcript: '${transcript}'`);
           }
           break;
         }
 
         case 'response.done':
-          log(`[x.ai → backend] Response done`, this.sessionSid);
+          logger.info({ sid: this.sessionSid }, '[x.ai → backend] Response done');
           if (this.onStatusChange) {
             this.onStatusChange('idle');
           }
           break;
 
         case 'error':
-          logError(`[x.ai → backend] Error: ${JSON.stringify(message)}`);
+          logger.error(`[x.ai → backend] Error: ${JSON.stringify(message)}`);
           if (this.onError) {
             this.onError(JSON.stringify(message));
           }
           break;
 
         case 'session.updated':
-          log(`[x.ai] Session updated`, this.sessionSid);
+          logger.info({ sid: this.sessionSid }, '[x.ai] Session updated');
           break;
 
         default:
           break;
       }
     } catch (error) {
-      logError(`[x.ai] Error parsing message: ${error}`);
+      logger.error(`[x.ai] Error parsing message: ${error}`);
     }
   }
 

@@ -3,7 +3,7 @@
  * When "stop" is detected, all controllers for that session are aborted.
  */
 
-import { log } from './log.js';
+import logger from './log.js';
 
 const sessionControllers = new Map<string, Set<AbortController>>();
 
@@ -25,7 +25,7 @@ export function createSignal(sid: string): AbortSignal {
 export function abortAll(sid: string): void {
   const controllers = sessionControllers.get(sid);
   if (!controllers) return;
-  log(`[interrupt] Aborting ${controllers.size} running task(s)`, sid);
+  logger.info({ sid }, `[interrupt] Aborting ${controllers.size} running task(s)`);
   for (const c of controllers) {
     c.abort();
   }

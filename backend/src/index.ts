@@ -10,8 +10,8 @@ const __dirname = path.dirname(__filename);
 
 // Load .env BEFORE agent imports (agents SDK sets up tracing at import time)
 const envPath = path.resolve(__dirname, '..', '.env');
-const { log } = await import('./log.js');
-log('[init] Loading .env from: ' + envPath);
+const { default: logger } = await import('./log.js');
+logger.info({ envPath }, 'Loading .env');
 dotenv.config({ path: envPath, override: true });
 
 // Dynamic imports so env vars are available when agent modules load
@@ -37,7 +37,7 @@ const jetbrainsAgent = new JetBrainsAgent();
 
 async function processWithOrchestrator(transcription: string, sid: string): Promise<void> {
   if (isStopCommand(transcription)) {
-    log(`[interrupt] Stop command detected`, sid);
+    logger.info({ sid }, '[interrupt] Stop command detected');
     abortAll(sid);
     jetbrainsAgent.killTerminalProcess();
     io.to(sid).emit('agents_stopped', { message: 'All agents stopped.' });
@@ -45,11 +45,11 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
   }
 
   const isReadOnly = readOnlyMap.get(sid) ?? false;
-  log(`[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}`, sid);
+  logger.info({ sid }, `[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}`);
 
   const result = await orchestratorAgent.process(transcription, isReadOnly, sid);
 
-  log(`[orchestrator] Generated ${result.prompts.length} prompts`, sid);
+  logger.info({ sid }, `[orchestrator] Generated ${result.prompts.length} prompts`);
   io.to(sid).emit('transcription_result', result);
 
   for (const promptInfo of result.prompts) {
@@ -60,7 +60,7 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
       jetbrainsAgent.process(promptInfo.prompt, signal, isReadOnly).then((result) => {
         io.to(sid).emit('ide_result', result);
       }).catch((error) => {
-        log(`[jetbrains_agent] Error: ${error}`, sid);
+        logger.info({ sid }, `[jetbrains_agent] Error: ${error}`);
         io.to(sid).emit('ide_result', { agent: 'jetbrains', status: 'error', message: String(error), received_prompt: promptInfo.prompt });
       });
     }
@@ -68,14 +68,14 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
 }
 
 function runBrowserCommand(prompt: string, sid: string, signal?: AbortSignal, readOnly?: boolean): void {
-  log(`[browser_agent] Processing command: ${prompt}`, sid);
+  logger.info({ sid }, `[browser_agent] Processing command: ${prompt}`);
   browserAgent
     .process(prompt, signal, readOnly)
     .then((result) => {
       io.to(sid).emit('browser_result', result);
     })
     .catch((error) => {
-      log(`[browser_agent] Error: ${error}`, sid);
+      logger.info({ sid }, `[browser_agent] Error: ${error}`);
       io.to(sid).emit('browser_result', { status: 'error', error: String(error) });
     });
 }
@@ -83,11 +83,11 @@ function runBrowserCommand(prompt: string, sid: string, signal?: AbortSignal, re
 io.on('connection', (socket) => {
   const sid = socket.id;
 
-  log('[socketio] Client connected', sid);
+  logger.info({ sid }, '[socketio] Client connected');
 
   socket.on('set_read_only', (value: boolean) => {
-    readOnlyMap.set(sid, !!value);
-    log(`[socketio] Read-only mode set to ${!!value}`, sid);
+    readOnlyMap.set(sid, value);
+    logger.info({ sid }, `[socketio] Read-only mode set to ${value}`);
   });
 
   socket.on('start_transcription_stream', async () => {
@@ -116,7 +116,7 @@ io.on('connection', (socket) => {
         io.to(sid).emit('status', { status });
       },
       (error: string) => {
-        log(`[x.ai] Error: ${error}`, sid);
+        logger.info({ sid }, `[x.ai] Error: ${error}`);
         io.to(sid).emit('error', { message: error });
       }
     );
@@ -127,9 +127,9 @@ io.on('connection', (socket) => {
 
       socket.emit('transcription_started', { message: 'Connected to x.ai and ready for audio.' });
       socket.emit('status', { status: 'idle' });
-      log('[socketio] Transcription stream started', sid);
+      logger.info({ sid }, '[socketio] Transcription stream started');
     } catch (error) {
-      log(`[x.ai] Failed to connect: ${error}`, sid);
+      logger.info({ sid }, `[x.ai] Failed to connect: ${error}`);
       socket.emit('error', { message: `Failed to connect to x.ai: ${error}` });
       xaiClients.delete(sid);
     }
@@ -152,7 +152,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('commit_audio', () => {
-    log('[socketio] commit_audio received', sid);
+    logger.info({ sid }, '[socketio] commit_audio received');
     const xaiClient = xaiClients.get(sid);
     if (xaiClient) {
       xaiClient.commitAudio();
@@ -160,7 +160,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('stop_transcription_stream', async () => {
-    log('[socketio] stop_transcription_stream', sid);
+    logger.info({ sid }, '[socketio] stop_transcription_stream');
     const xaiClient = xaiClients.get(sid);
     if (xaiClient) {
       xaiClient.close();
@@ -175,27 +175,27 @@ io.on('connection', (socket) => {
 
   socket.on('manual_prompt', (text: string) => {
     if (!text?.trim()) return;
-    log(`[socketio] Manual prompt received, len=${text.length}`, sid);
+    logger.info({ sid }, `[socketio] Manual prompt received, len=${text.length}`);
     statusMap.set(sid, 'executing');
     socket.emit('status', { status: 'executing' });
     processWithOrchestrator(text.trim(), sid);
   });
 
   socket.on('stop_all', () => {
-    log('[socketio] stop_all received', sid);
+    logger.info({ sid }, '[socketio] stop_all received');
     abortAll(sid);
     jetbrainsAgent.killTerminalProcess();
     socket.emit('agents_stopped', { message: 'All agents stopped.' });
   });
 
   socket.on('disconnect', () => {
-    log('[socketio] Client disconnected', sid);
+    logger.info({ sid }, '[socketio] Client disconnected');
     abortAll(sid);
     cleanup(sid);
     orchestratorAgent.clearHistory(sid);
     const xaiClient = xaiClients.get(sid);
     if (xaiClient) {
-      log('[x.ai] Closing connection due to client disconnect', sid);
+      logger.info({ sid }, '[x.ai] Closing connection due to client disconnect');
       xaiClient.close();
       xaiClients.delete(sid);
     }
@@ -205,5 +205,5 @@ io.on('connection', (socket) => {
 });
 
 httpServer.listen(PORT, () => {
-  log(`Server running on port ${PORT}`);
+  logger.info(`Server running on port ${PORT}`);
 });
