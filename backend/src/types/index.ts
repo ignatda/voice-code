@@ -1,5 +1,5 @@
 export interface PromptInfo {
-  agent: 'browser' | 'jetbrains';
+  agent: 'browser' | 'jetbrains' | 'planner';
   prompt: string;
 }
 

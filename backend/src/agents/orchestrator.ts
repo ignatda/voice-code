@@ -9,15 +9,21 @@ Your role is to analyze transcribed user speech and determine which specialized 
 Available agents:
 1. **browser** - Controls web browser (open pages, search, navigate, read content, watch videos, control video playback, scroll, click, close tabs, find elements on page)
 2. **jetbrains** - Controls IDE (IntelliJ IDEA) - create files, edit code, run commands, manage projects
+3. **planner** - Designs implementation plans for complex features before coding. Use for architecture, design, planning discussions.
 
-Analyze the user's transcribed speech and create specific prompts for the appropriate agents.
+Routing rules:
+- Planning/design requests (e.g. "plan", "design", "think about", "how should we", "let's discuss", "what's the best way to") → **planner**
+- Implementation triggers (e.g. "implement it", "do it", "let's go", "execute", "make it", "build it", "go ahead") when a plan was previously discussed → **jetbrains** with prompt: "Implement the following plan:\\n<the plan from planner>"
+- Direct IDE actions (open, search, navigate, run, simple edits) → **jetbrains**
+- Web/browser actions → **browser**
+- Refinement of an existing plan (e.g. "also add logging", "skip the tests", "change step 2") → **planner**
 
 Output format (JSON):
 {
   "original_text": "<the transcribed text>",
   "prompts": [
     {
-      "agent": "browser" | "jetbrains",
+      "agent": "browser" | "jetbrains" | "planner",
       "prompt": "<specific action to perform>"
     }
   ]
@@ -27,7 +33,7 @@ Rules:
 - If the user mentions browsing, searching, opening a website, reading web content, watching videos, video playback, scrolling, clicking, closing tabs, or any web/navigation action → include browser agent
 - If the user mentions coding, files, IDE, running code, project management, code review, improvements, refactoring, analysis, or anything related to the codebase → include jetbrains agent
 - If the speech is just a greeting with no actionable request (e.g. "hello", "hi") → prompts array can be empty
-- When in doubt, route to jetbrains agent. Prefer generating a prompt over returning empty.
+- When in doubt between planner and jetbrains, route to jetbrains. Prefer generating a prompt over returning empty.
 - Always preserve the original transcribed text exactly
 - Make prompts specific and actionable
 - Use English for prompts regardless of the input language
@@ -58,7 +64,7 @@ export class OrchestratorAgent {
     this.history.delete(sid);
   }
 
-  async process(transcription: string, readOnly = false, sid?: string): Promise<OrchestratorResult> {
+  async process(transcription: string, readOnly = false, sid?: string, pendingPlan?: string): Promise<OrchestratorResult> {
     if (!transcription || transcription.trim().length < 3) {
       return {
         original_text: transcription,
@@ -111,6 +117,7 @@ export class OrchestratorAgent {
         messages: [
           { role: 'system', content: ORCHESTRATOR_SYSTEM_PROMPT },
           ...(readOnly ? [{ role: 'system' as const, content: 'READ-ONLY MODE is active. Agents can only read/view/navigate. Do NOT generate prompts for writing, editing, creating, or deleting files or code. If the user asks for modifications, still route to the appropriate agent — the agent will inform them about read-only restrictions.' }] : []),
+          ...(pendingPlan ? [{ role: 'system' as const, content: `There is a pending implementation plan from the planner agent:\n\n${pendingPlan}\n\nIf the user says something like "implement it", "do it", "let's go", "execute", "go ahead" — route to jetbrains with the full plan as the prompt. If the user wants to refine the plan, route to planner.` }] : []),
           ...sessionHistory,
           { role: 'user', content: userMsg },
         ],
@@ -122,8 +129,8 @@ export class OrchestratorAgent {
         throw new Error('Empty response from model');
       }
 
-      // Extract JSON from response (model may wrap in markdown fences or add extra text)
-      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      // Extract JSON from response (model may wrap in Markdown fences or add extra text)
+      const jsonMatch = content.match(/\{[\s\S]*}/);
       if (!jsonMatch) {
         throw new Error('No JSON found in response');
       }

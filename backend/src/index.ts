@@ -16,7 +16,7 @@ dotenv.config({ path: envPath, override: true });
 
 // Dynamic imports so env vars are available when agent modules load
 const { XAIVoiceClient } = await import('./xai-realtime.js');
-const { OrchestratorAgent, BrowserAgent, JetBrainsAgent } = await import('./agents/index.js');
+const { OrchestratorAgent, BrowserAgent, JetBrainsAgent, PlannerAgent } = await import('./agents/index.js');
 const { createSignal, abortAll, cleanup, isStopCommand } = await import('./interrupt.js');
 
 const XAI_API_KEY = process.env.OPENAI_API_KEY || process.env.XAI_API_KEY;
@@ -152,6 +152,8 @@ const xaiClients = new Map<string, InstanceType<typeof XAIVoiceClient>>();
 const orchestratorAgent = new OrchestratorAgent(XAI_API_KEY || '');
 const browserAgent = new BrowserAgent();
 const jetbrainsAgent = new JetBrainsAgent();
+const plannerAgent = new PlannerAgent(XAI_API_KEY || '');
+const pendingPlans = new Map<string, string>(); // sessionId → plan markdown
 
 function getActiveSessionId(socketId: string): string | undefined {
   return socketSession.get(socketId);
@@ -170,9 +172,10 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
   }
 
   const isReadOnly = readOnlyMap.get(sid) ?? false;
-  logger.info({ sid }, `[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}`);
+  const pendingPlan = sessionId ? pendingPlans.get(sessionId) : undefined;
+  logger.info({ sid }, `[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}, hasPlan=${!!pendingPlan}`);
 
-  const result = await orchestratorAgent.process(transcription, isReadOnly, sessionId || sid);
+  const result = await orchestratorAgent.process(transcription, isReadOnly, sessionId || sid, pendingPlan);
 
   logger.info({ sid }, `[orchestrator] Generated ${result.prompts.length} prompts`);
   io.to(sid).emit('transcription_result', result);
@@ -191,7 +194,22 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
     const signal = createSignal(sid);
     if (promptInfo.agent === 'browser') {
       runBrowserCommand(promptInfo.prompt, sid, signal, isReadOnly);
+    } else if (promptInfo.agent === 'planner') {
+      plannerAgent.process(promptInfo.prompt, sessionId || sid, signal).then((r) => {
+        io.to(sid).emit('ide_result', r);
+        if (sessionId) {
+          addItem(sessionId, { type: 'agent', agent: 'planner', text: r.message });
+          pendingPlans.set(sessionId, r.message);
+        }
+      }).catch((error) => {
+        logger.info({ sid }, `[planner_agent] Error: ${error}`);
+        const msg = String(error);
+        io.to(sid).emit('ide_result', { agent: 'planner', status: 'error', message: msg, received_prompt: promptInfo.prompt });
+        if (sessionId) addItem(sessionId, { type: 'agent', agent: 'planner', text: msg });
+      });
     } else if (promptInfo.agent === 'jetbrains') {
+      // Clear pending plan once it's sent to jetbrains for implementation
+      if (sessionId && pendingPlans.has(sessionId)) pendingPlans.delete(sessionId);
       jetbrainsAgent.process(promptInfo.prompt, signal, isReadOnly).then((r) => {
         io.to(sid).emit('ide_result', r);
         if (sessionId) addItem(sessionId, { type: 'agent', agent: 'jetbrains', text: r.message });
@@ -226,8 +244,8 @@ io.on('connection', (socket) => {
   logger.info({ sid }, '[socketio] Client connected');
 
   socket.on('set_read_only', (value: boolean) => {
-    readOnlyMap.set(sid, !!value);
-    logger.info({ sid }, `[socketio] Read-only mode set to ${!!value}`);
+    readOnlyMap.set(sid, value);
+    logger.info({ sid }, `[socketio] Read-only mode set to ${value}`);
   });
 
   // ── Session management ────────────────────────────────────────────────────
@@ -254,6 +272,8 @@ io.on('connection', (socket) => {
     sessions.delete(sessionId);
     deleteSessionFile(sessionId);
     orchestratorAgent.clearHistory(sessionId);
+    plannerAgent.clearHistory(sessionId);
+    pendingPlans.delete(sessionId);
     if (socketSession.get(sid) === sessionId) {
       socketSession.delete(sid);
     }
