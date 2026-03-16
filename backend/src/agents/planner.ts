@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { JetBrainsResult } from '../types';
-import { getXAIConfig } from './config.js';
+import { getXAIConfig, getAgentsMd } from './config.js';
 import logger from '../log.js';
 
 const PLANNER_SYSTEM_PROMPT = `You are a Planning Agent for a voice-controlled IDE.
@@ -15,6 +15,8 @@ Rules:
 - Keep plans minimal — fewest steps possible
 - If the request is vague or no specific feature is described, ask the user what they want to build. Start with a brief greeting like "Ready to plan! What feature would you like to build?" and optionally suggest clarifying questions.
 - Use English regardless of input language
+
+${getAgentsMd()}
 `;
 
 export class PlannerAgent {

@@ -1,7 +1,6 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -9,10 +8,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Load .env BEFORE agent imports (agents SDK sets up tracing at import time)
-const envPath = path.resolve(__dirname, '..', '.env');
+import { loadEnv, validateEnv } from './config/env.js';
+loadEnv();
 const { default: logger } = await import('./log.js');
-logger.info({ envPath }, 'Loading .env');
-dotenv.config({ path: envPath, override: true });
+logger.info('Loading .env via config/env');
+
+import settingsRouter from './routes/settings.js';
 
 // Dynamic imports so env vars are available when agent modules load
 const { XAIVoiceClient } = await import('./xai-realtime.js');
@@ -23,6 +24,11 @@ const XAI_API_KEY = process.env.OPENAI_API_KEY || process.env.XAI_API_KEY;
 const PORT = parseInt(process.env.PORT || '5000');
 
 const app = express();
+app.use((_req, res, next) => { res.header('Access-Control-Allow-Origin', '*'); res.header('Access-Control-Allow-Headers', '*'); res.header('Access-Control-Allow-Methods', 'GET,POST,OPTIONS'); if (_req.method === 'OPTIONS') { res.sendStatus(204); return; } next(); });
+app.use('/api/settings', settingsRouter);
+app.get('/api/settings/setup-required', (_req, res) => {
+  res.json({ setupRequired: !validateEnv().valid });
+});
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: { origin: '*' },

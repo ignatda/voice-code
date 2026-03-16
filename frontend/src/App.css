@@ -617,3 +617,125 @@ body {
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ── Settings ────────────────────────────────────────────────────────────── */
+.settings-btn {
+  background: transparent;
+  border: 2px solid #555;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  transition: all 0.2s ease;
+}
+
+.settings-btn:hover {
+  border-color: #888;
+  color: #888;
+}
+
+.settings-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background-color: #1a1a1a;
+  padding: 20px;
+}
+
+.settings-form {
+  background-color: #252525;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 32px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-form h2 {
+  color: #e0e0e0;
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+.settings-notice {
+  color: #ff9800;
+  font-size: 13px;
+  margin: 0;
+}
+
+.settings-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #aaa;
+  font-size: 13px;
+}
+
+.settings-form .required {
+  color: #f44336;
+}
+
+.settings-form input,
+.settings-form select {
+  padding: 8px 12px;
+  background-color: #0d0d0d;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 14px;
+  outline: none;
+}
+
+.settings-form input:focus,
+.settings-form select:focus {
+  border-color: #555;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.settings-actions button {
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: 1px solid #444;
+  background-color: #333;
+  color: #e0e0e0;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.15s;
+}
+
+.settings-actions button[type="submit"] {
+  background-color: #4caf50;
+  border-color: #4caf50;
+  color: #fff;
+}
+
+.settings-actions button:hover {
+  opacity: 0.85;
+}
+
+.setup-overlay {
+  background-color: rgba(0, 0, 0, 0.7);
+  padding: 16px;
+  text-align: center;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.setup-overlay a {
+  color: #4caf50;
+  text-decoration: underline;
+}

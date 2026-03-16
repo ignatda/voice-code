@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import MarkdownMessage from './MarkdownMessage';
+import { SettingsProvider, useSettings } from './contexts/SettingsContext';
+import Settings from './components/Settings';
+import SettingsMenuButton from './components/SettingsMenuButton';
 import './App.css';
 
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5000';
 
-function App() {
+function MainApp() {
+  const { setupRequired } = useSettings();
   const [micEnabled, setMicEnabled] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('idle');
@@ -350,10 +355,17 @@ function App() {
                 </svg>
               )}
             </button>
+
+            <SettingsMenuButton />
           </div>
         </header>
 
         <main className="content">
+          {setupRequired && (
+            <div className="setup-overlay">
+              <p>⚙️ Setup required. <a href="/settings">Go to Settings</a></p>
+            </div>
+          )}
           <div className="terminal-body">
             {error && <p className="error">{error}</p>}
 
@@ -413,4 +425,23 @@ function App() {
   );
 }
 
-export default App;
+function AppRoutes() {
+  const { setupRequired, loading } = useSettings();
+  if (loading) return null;
+  return (
+    <Routes>
+      <Route path="/" element={setupRequired ? <Navigate to="/settings" replace /> : <MainApp />} />
+      <Route path="/settings" element={<Settings />} />
+    </Routes>
+  );
+}
+
+export default function App() {
+  return (
+    <SettingsProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </SettingsProvider>
+  );
+}

@@ -1,7 +1,7 @@
 import { Agent, run, setDefaultModelProvider, OpenAIProvider } from '@openai/agents';
 import { MCPServerStdio } from '@openai/agents';
 import type { JetBrainsResult } from '../types';
-import { getXAIConfig } from './config.js';
+import { getXAIConfig, getAgentsMd } from './config.js';
 import logger from '../log.js';
 
 const KIRO_WRAPPER = new URL('../scripts/kiro-wrapper.sh', import.meta.url).pathname;
@@ -22,6 +22,7 @@ const CLI_TOOLS: Record<string, { bin: string; run: string; continueFlag: string
 
 const getCliTool = () => {
   const name = process.env.CODING_CLI || 'opencode';
+  if (name === 'none') return null;
   return CLI_TOOLS[name] || CLI_TOOLS['opencode'];
 };
 
@@ -40,6 +41,32 @@ const JETBRAINS_MCP_CONFIG = {
 
 const getJetBrainsInstructions = (readOnly = false) => {
   const cli = getCliTool();
+
+  if (!cli) {
+    // CODING_CLI=none — agent codes directly via MCP tools
+    return `You are an IDE control agent for IntelliJ IDEA${readOnly ? ' in READ-ONLY mode' : ''}.
+
+You have access to JetBrains IDE tools via MCP. You handle ALL tasks directly — navigation, reading, AND coding.
+
+## Capabilities (use MCP tools directly):
+- Open files, navigate to symbols or lines
+- Search in project, read file contents
+- Get project structure, list directory trees
+- Get file problems / diagnostics
+${readOnly ? '' : `- Create, edit, rename, reformat files
+- Write code, refactor, generate new files
+- Use replace_text_in_file, create_new_file, reformat_file for code changes
+- Build the project and check for errors after changes`}
+${readOnly ? `\n## STRICTLY FORBIDDEN in read-only mode:
+- NEVER create, edit, delete, rename, or write files
+- NEVER use replace_text_in_file, create_new_file, reformat_file, rename_refactoring` : ''}
+
+- NEVER ask clarifying questions. Use available tools to discover information.
+- After making code changes, always build and check for problems.
+
+${getAgentsMd()}`;
+  }
+
   const cliPrefix = readOnly
     ? 'READ-ONLY MODE: Do NOT create, edit, delete, or rename any files. Only read, analyze, and answer. '
     : '';
@@ -81,7 +108,9 @@ When CLI output contains a \`KIRO_IDE_ACTIONS_BEGIN\` / \`KIRO_IDE_ACTIONS_END\`
 - \`"reformat:<path>"\` → call reformat_file for that file
 - \`"build"\` → call build_project, include errors/warnings in your response
 - \`"problems:<path>"\` → call get_file_problems for that file, report any issues
-Execute all actions sequentially after the CLI finishes. Include results in your final response.`;
+Execute all actions sequentially after the CLI finishes. Include results in your final response.
+
+${getAgentsMd()}`;
 };
 
 let mcpServer: MCPServerStdio | null = null;
@@ -167,9 +196,11 @@ export class JetBrainsAgent {
 
   async process(prompt: string, signal?: AbortSignal, readOnly = false): Promise<JetBrainsResult> {
     const cli = getCliTool();
-    const sessionHint = this.hasActiveSession
-      ? `\n[CONTEXT: A coding CLI session already exists. Use ${cli.continueFlag} flag for any coding commands.]`
-      : '\n[CONTEXT: No coding CLI session yet. Do NOT use the continue flag for the first coding command.]';
+    const sessionHint = cli
+      ? (this.hasActiveSession
+        ? `\n[CONTEXT: A coding CLI session already exists. Use ${cli.continueFlag} flag for any coding commands.]`
+        : '\n[CONTEXT: No coding CLI session yet. Do NOT use the continue flag for the first coding command.]')
+      : '';
     const modeHint = readOnly ? '\n[MODE: READ-ONLY — do NOT write, edit, create files or run coding CLI.]' : '';
     const augmentedPrompt = prompt + sessionHint + modeHint;
 

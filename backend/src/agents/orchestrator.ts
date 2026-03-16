@@ -12,7 +12,7 @@ Available agents:
 3. **planner** - Designs implementation plans for complex features before coding. Use for architecture, design, planning discussions.
 
 Routing rules:
-- Planning/design requests (e.g. "plan", "design", "think about", "how should we", "let's discuss", "what's the best way to", "new feature", "let's plan") → **planner** ONLY (do NOT also route to jetbrains)
+- Planning/design requests (e.g. "plan", "design", "think about", "how should we", "let's discuss", "what's the best way to", "new feature", "let's plan", "open the planner", "open planner", "start planning") → **planner** ONLY (do NOT also route to jetbrains)
 - Implementation triggers (e.g. "implement it", "do it", "let's go", "execute", "make it", "build it", "go ahead") when a plan was previously discussed → **jetbrains** (the plan will be provided in a separate system message; if no plan exists yet, route to **planner** instead)
 - Direct IDE actions (open, search, navigate, run, simple edits) → **jetbrains**
 - Web/browser actions → **browser**
@@ -43,6 +43,7 @@ Rules:
 - Output only valid JSON, no additional text
 - NEVER return empty prompts for valid commands - always include at least one agent if the user is asking to do something
 - Common commands to recognize:
+  - "open the planner" / "open planner" / "start planning" → planner agent (NOT browser)
   - "scroll" / "scroll down" / "scroll up" → browser agent
   - "open" / "go to" / "navigate to" → browser agent
   - "search" / "find" → browser agent
