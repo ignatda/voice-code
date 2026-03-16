@@ -154,6 +154,20 @@ const browserAgent = new BrowserAgent();
 const jetbrainsAgent = new JetBrainsAgent();
 const plannerAgent = new PlannerAgent(XAI_API_KEY || '');
 const pendingPlans = new Map<string, string>(); // sessionId → plan markdown
+const plannerMode = new Map<string, boolean>(); // sessionId → whether planner session is active
+
+const STOP_SCRIPT = path.resolve(__dirname, '..', 'stop.sh');
+
+function killAll(sid: string): void {
+  abortAll(sid);
+  jetbrainsAgent.killTerminalProcess();
+  import('child_process').then(({ execFile }) => {
+    execFile(STOP_SCRIPT, (err) => {
+      if (err) logger.error({ sid }, `[stop] stop.sh error: ${err.message}`);
+      else logger.info({ sid }, '[stop] stop.sh executed');
+    });
+  });
+}
 
 function getActiveSessionId(socketId: string): string | undefined {
   return socketSession.get(socketId);
@@ -164,18 +178,27 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
 
   if (isStopCommand(transcription)) {
     logger.info({ sid }, '[interrupt] Stop command detected');
-    abortAll(sid);
-    jetbrainsAgent.killTerminalProcess();
+    killAll(sid);
     io.to(sid).emit('agents_stopped', { message: 'All agents stopped.' });
-    if (sessionId) addItem(sessionId, { type: 'system', text: '⛔ All agents stopped.' });
+    if (sessionId) {
+      addItem(sessionId, { type: 'system', text: '⛔ All agents stopped.' });
+      plannerMode.delete(sessionId);
+    }
     return;
   }
 
   const isReadOnly = readOnlyMap.get(sid) ?? false;
   const pendingPlan = sessionId ? pendingPlans.get(sessionId) : undefined;
-  logger.info({ sid }, `[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}, hasPlan=${!!pendingPlan}`);
+  const inPlannerMode = sessionId ? (plannerMode.get(sessionId) ?? false) : false;
+  logger.info({ sid }, `[orchestrator] Processing transcription, text_len=${transcription.length}, readOnly=${isReadOnly}, hasPlan=${!!pendingPlan}, plannerMode=${inPlannerMode}`);
 
-  const result = await orchestratorAgent.process(transcription, isReadOnly, sessionId || sid, pendingPlan);
+  const result = await orchestratorAgent.process(transcription, isReadOnly, sessionId || sid, pendingPlan, inPlannerMode);
+
+  // Handle exit_planner signal from the orchestrator
+  if (result.exit_planner && sessionId) {
+    plannerMode.delete(sessionId);
+    logger.info({ sid }, '[planner_mode] Exited planner mode via orchestrator');
+  }
 
   logger.info({ sid }, `[orchestrator] Generated ${result.prompts.length} prompts`);
   io.to(sid).emit('transcription_result', result);
@@ -195,6 +218,8 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
     if (promptInfo.agent === 'browser') {
       runBrowserCommand(promptInfo.prompt, sid, signal, isReadOnly);
     } else if (promptInfo.agent === 'planner') {
+      // Enter planner mode so follow-up phrases stay with planner
+      if (sessionId) plannerMode.set(sessionId, true);
       plannerAgent.process(promptInfo.prompt, sessionId || sid, signal).then((r) => {
         io.to(sid).emit('ide_result', r);
         if (sessionId) {
@@ -208,8 +233,11 @@ async function processWithOrchestrator(transcription: string, sid: string): Prom
         if (sessionId) addItem(sessionId, { type: 'agent', agent: 'planner', text: msg });
       });
     } else if (promptInfo.agent === 'jetbrains') {
-      // Clear pending plan once it's sent to jetbrains for implementation
-      if (sessionId && pendingPlans.has(sessionId)) pendingPlans.delete(sessionId);
+      // Clear pending plan and planner mode once sent to jetbrains
+      if (sessionId) {
+        pendingPlans.delete(sessionId);
+        plannerMode.delete(sessionId);
+      }
       jetbrainsAgent.process(promptInfo.prompt, signal, isReadOnly).then((r) => {
         io.to(sid).emit('ide_result', r);
         if (sessionId) addItem(sessionId, { type: 'agent', agent: 'jetbrains', text: r.message });
@@ -274,6 +302,7 @@ io.on('connection', (socket) => {
     orchestratorAgent.clearHistory(sessionId);
     plannerAgent.clearHistory(sessionId);
     pendingPlans.delete(sessionId);
+    plannerMode.delete(sessionId);
     if (socketSession.get(sid) === sessionId) {
       socketSession.delete(sid);
     }
@@ -389,8 +418,7 @@ io.on('connection', (socket) => {
 
   socket.on('stop_all', () => {
     logger.info({ sid }, '[socketio] stop_all received');
-    abortAll(sid);
-    jetbrainsAgent.killTerminalProcess();
+    killAll(sid);
     socket.emit('agents_stopped', { message: 'All agents stopped.' });
   });
 

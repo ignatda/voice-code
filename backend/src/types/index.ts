@@ -6,6 +6,7 @@ export interface PromptInfo {
 export interface OrchestratorResult {
   original_text: string;
   prompts: PromptInfo[];
+  exit_planner?: boolean;
 }
 
 export interface BrowserResult {

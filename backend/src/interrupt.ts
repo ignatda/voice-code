@@ -37,5 +37,5 @@ export function cleanup(sid: string): void {
 }
 
 export function isStopCommand(text: string): boolean {
-  return /^\s*stop\s*[.!]?\s*$/i.test(text);
+  return /^\s*(stop|стоп)\s*[.!]?\s*$/i.test(text);
 }

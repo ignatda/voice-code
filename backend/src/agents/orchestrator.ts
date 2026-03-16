@@ -64,7 +64,7 @@ export class OrchestratorAgent {
     this.history.delete(sid);
   }
 
-  async process(transcription: string, readOnly = false, sid?: string, pendingPlan?: string): Promise<OrchestratorResult> {
+  async process(transcription: string, readOnly = false, sid?: string, pendingPlan?: string, plannerMode = false): Promise<OrchestratorResult> {
     if (!transcription || transcription.trim().length < 3) {
       return {
         original_text: transcription,
@@ -117,7 +117,8 @@ export class OrchestratorAgent {
         messages: [
           { role: 'system', content: ORCHESTRATOR_SYSTEM_PROMPT },
           ...(readOnly ? [{ role: 'system' as const, content: 'READ-ONLY MODE is active. Agents can only read/view/navigate. Do NOT generate prompts for writing, editing, creating, or deleting files or code. If the user asks for modifications, still route to the appropriate agent — the agent will inform them about read-only restrictions.' }] : []),
-          ...(pendingPlan ? [{ role: 'system' as const, content: `There is a pending implementation plan from the planner agent:\n\n${pendingPlan}\n\nIf the user says something like "implement it", "do it", "let's go", "execute", "go ahead" — route to jetbrains with the full plan as the prompt. If the user wants to refine the plan, route to planner.` }] : []),
+          ...(plannerMode ? [{ role: 'system' as const, content: `PLANNER MODE IS ACTIVE. A planning session is in progress.\n\nYou MUST route to one of these options ONLY:\n1. **planner** — if the user continues discussing, refining, or asking about the plan (this is the default)\n2. **jetbrains** — ONLY if the user explicitly asks to implement/execute/build the plan. Include the full plan in the prompt: "Implement the following plan:\\n${pendingPlan || '(no plan yet)'}"\n3. **empty prompts** — ONLY if the user says to exit/stop/cancel planning (e.g. "exit plan", "done planning", "cancel plan"). In this case also set "exit_planner": true in the JSON.\n\nDo NOT route to browser. Do NOT bypass the planner for unrelated requests — the user is in a planning session.\n\nOutput format when exiting planner:\n{"original_text": "...", "prompts": [], "exit_planner": true}` }] : []),
+          ...(pendingPlan && !plannerMode ? [{ role: 'system' as const, content: `There is a pending implementation plan from the planner agent:\n\n${pendingPlan}\n\nIf the user says something like "implement it", "do it", "let's go", "execute", "go ahead" — route to jetbrains with the full plan as the prompt. If the user wants to refine the plan, route to planner.` }] : []),
           ...sessionHistory,
           { role: 'user', content: userMsg },
         ],
@@ -147,6 +148,7 @@ export class OrchestratorAgent {
       return {
         original_text: transcription,
         prompts: result.prompts || [],
+        ...(result.exit_planner ? { exit_planner: true } : {}),
       };
     } catch (error) {
       logger.error(`[orchestrator] Error: ${error}`);
