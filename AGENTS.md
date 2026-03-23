@@ -1,0 +1,227 @@
+# AGENTS.md - Voice Code Project Guidelines
+
+This document provides guidelines for agentic coding agents operating in this repository.
+
+## Project Overview
+
+- **Project Name**: Voice Code
+- **Type**: Real-time voice-to-code IDE
+- **Stack**: React.js frontend (Vite), Node.js Express backend (Socket.IO), Grok API
+- **Language**: English and Russian voice transcription
+
+## Architecture
+
+The system uses a multi-agent architecture powered by the **OpenAI Agents SDK** (`@openai/agents`):
+
+1. **Orchestrator Agent** (`agents/orchestrator/`) — SDK Agent with `handoff()` to browser/IDE/planner. Includes a `translate_to_english` FunctionTool for multilingual input. Routes commands via SDK handoffs (no manual JSON parsing).
+2. **Browser Agent** (`agents/browser/`) — Controls a Chromium browser via Playwright MCP server. Uses SDK `Agent` + `run()` with `useResponses: false` (Chat Completions mode) against the Grok API.
+3. **IDE Agent** (`agents/ide/`) — Unified agent supporting JetBrains, VS Code, or no IDE. Uses SDK `Agent` + `run()` with MCP servers and `FunctionTool` CLI bridges. Behavior depends on `IDE_TYPE` and `CODING_CLI` env vars:
+   - `IDE_TYPE=jetbrains|vscode` + `CODING_CLI=opencode|kiro-cli` → MCP for navigation, FunctionTool for coding (default)
+   - `IDE_TYPE=jetbrains|vscode` + `CODING_CLI=none` → MCP for everything including coding
+   - `IDE_TYPE=none` + `CODING_CLI=opencode|kiro-cli` → FunctionTool only, no MCP
+   - `IDE_TYPE=none` + `CODING_CLI=none` → Chat-only, no tools
+4. **Planner Agent** (`agents/planner/`) — Designs implementation plans for complex features before coding. Uses SDK `Agent` + `run()`.
+5. **Voice Client** (`agents/voice/`) — Handles voice input/output via WebSocket (x.ai Realtime API, PCM16 audio at 24kHz mono). Native WebSocket, not an SDK Agent.
+
+### Backend File Structure
+
+```
+backend/src/
+├── index.ts                    # Bootstrap: loadEnv → imports → listen
+├── server.ts                   # Express + Socket.IO setup
+├── router.ts                   # Socket.IO event handlers → run(orchestrator, input, { session })
+│
+├── agents/
+│   ├── index.ts                # buildAgentGraph() — wires handoffs, re-exports
+│   ├── provider.ts             # Shared OpenAIProvider setup (ensureProvider)
+│   ├── context.ts              # AppContext type for SDK RunContext
+│   ├── guardrails.ts           # readOnlyGuardrail (SDK InputGuardrail)
+│   │
+│   ├── orchestrator/
+│   │   └── index.ts            # SDK Agent + handoffs + translate_to_english FunctionTool
+│   │
+│   ├── browser/
+│   │   └── index.ts            # SDK Agent + Playwright MCPServerStdio
+│   │
+│   ├── planner/
+│   │   └── index.ts            # SDK Agent, no tools
+│   │
+│   ├── voice/
+│   │   └── index.ts            # Native WebSocket (x.ai Realtime API)
+│   │
+│   └── ide/
+│       ├── index.ts            # SDK Agent factory (createIDEAgent)
+│       ├── mcp/
+│       │   ├── jetbrains.ts    # MCPServerStdio config for JetBrains
+│       │   └── vscode.ts       # MCPServerStdio config for VS Code
+│       └── tools/
+│           ├── cli.ts          # CLI config + getCliFunctionTool()
+│           ├── opencode.ts     # FunctionTool: run_opencode
+│           ├── kiro.ts         # FunctionTool: run_kiro
+│           ├── opencode-wrapper.sh
+│           ├── kiro-wrapper.sh
+│           └── stop.sh         # Kill script for CLI processes
+│
+├── core/
+│   ├── index.ts                # Re-exports
+│   ├── logger.ts               # Pino logger
+│   ├── config.ts               # Env loading, validation, getXAIConfig, getAgentsMd
+│   ├── session.ts              # SessionStore (UI) + AgentSession (SDK Session)
+│   └── interrupt.ts            # AbortController registry, stop detection
+│
+├── routes/
+│   └── settings.ts             # REST endpoint (uses core/config)
+│
+└── types/
+    └── index.ts                # Shared types
+```
+
+### Dependency Flow
+
+```
+core/  ←──  agents/  ←──  router.ts  ←──  index.ts
+  ↑                          ↑
+  └──── routes/settings.ts ──┘
+        server.ts ───────────┘
+```
+
+- `core/` imports nothing from `agents/` or `router.ts`
+- `agents/` imports from `core/` only
+- `router.ts` imports from `agents/` and `core/`
+- `index.ts` wires everything together
+
+### IDE Agent Dispatch Flow
+
+```
+Voice → Transcribe → Orchestrator → IDE Agent (Grok)
+                                          ↓
+                                    Decides action type
+                                          ↓
+                          ┌───────────────┴───────────────┐
+                          ↓                               ↓
+                   Direct IDE action              Coding task
+                   (MCP tools)                    (FunctionTool)
+                   e.g. open file,                → run_opencode({ prompt })
+                   search, navigate               → run_kiro({ prompt })
+```
+
+When `IDE_TYPE=none`, the MCP branch is unavailable and all tasks go to CLI FunctionTool.
+When `CODING_CLI=none`, the CLI branch is unavailable and all tasks use MCP directly.
+
+## Technology Stack
+
+- **AI Framework**: OpenAI Agents SDK v0.7+ (`@openai/agents`) — configured with `useResponses: false` for Grok API compatibility
+- **LLM Provider**: Grok API (https://docs.x.ai)
+    - API key configured via `OPENAI_API_KEY` in `.env`
+    - Base URL configured via `OPENAI_BASE_URL` in `.env`
+    - Tracing disabled via `OPENAI_AGENTS_DISABLE_TRACING=1` (incompatible with Grok)
+- **Coding CLI**: Configurable via `CODING_CLI` env var — `opencode` (default) or `kiro-cli`
+- **Frontend**: React 19 with Vite
+- **Backend**: Node.js Express with Socket.IO, TypeScript
+- **Real-time Communication**: WebSocket (x.ai Realtime API)
+- **Browser Control**: Playwright MCP Server (`@playwright/mcp`)
+- **IDE Integration**: JetBrains MCP Server or VS Code MCP Server
+- **Containerization**: Docker with docker-compose
+
+## Build, Lint, and Test Commands
+
+### Frontend (React + Vite)
+
+```bash
+cd frontend
+npm install
+npm run dev       # Development server
+npm run build     # Production build
+npm run lint      # ESLint
+npm run preview   # Preview production build
+```
+
+### Backend (Node.js + Express)
+
+```bash
+cd backend
+npm install
+npm run dev       # Development server (tsx watch)
+npm run build     # TypeScript compilation
+npm start         # Production server
+```
+
+### Docker
+
+```bash
+docker-compose up --build
+```
+
+## Code Style Guidelines
+
+### General Principles
+
+1. **Clean, maintainable code** with proper error handling
+2. **Well-documented** with clear comments for complex logic
+3. **Follow existing patterns** in the codebase
+4. **Use TypeScript types** in backend
+
+### JavaScript/React (Frontend)
+
+- Components in `frontend/src/`, use `.jsx` extension
+- Components: PascalCase, functions/variables: camelCase, constants: UPPER_SNAKE_CASE
+- Functional components with hooks (`useState`, `useEffect`, `useCallback`, `useRef`)
+- Clean up resources in `useEffect` return function
+
+### TypeScript/Node.js (Backend)
+
+**Key patterns**:
+- Env vars read lazily via getter functions (not at module scope) to ensure dotenv has loaded
+- Agent modules dynamically imported in `index.ts` after dotenv loads
+- Shared `OpenAIProvider` via `ensureProvider()` in `agents/provider.ts`
+- MCP servers spawned with full `process.env` to inherit `DISPLAY` for headed browser mode
+- CLI bridges are SDK `FunctionTool` instances (`tool()` from `@openai/agents`)
+- Each agent is a self-contained package under `agents/<name>/`
+
+**Imports**:
+```typescript
+// Node.js built-ins first
+import { createServer } from 'http';
+
+// External libraries
+import express from 'express';
+import { Agent, run, tool } from '@openai/agents';
+import { MCPServerStdio } from '@openai/agents';
+
+// Local imports last
+import type { BrowserResult } from '../../types/index.js';
+import { ensureProvider } from '../provider.js';
+```
+
+**Error Handling**:
+- Use try/catch blocks for WebSocket and network operations
+- Emit error events to client via Socket.IO rather than throwing
+- Log errors with descriptive messages including session IDs
+
+### Shared Conventions
+
+**Environment Variables**:
+- Store secrets in `.env` (never commit)
+- Use `.env.example` for template
+- Access via `process.env` in Node.js, `import.meta.env` in Vite
+- `CODING_CLI` — switch between `opencode`, `kiro-cli`, or `none`
+- `IDE_TYPE` — switch between `jetbrains`, `vscode`, or `none`
+
+**Socket.IO Events**:
+- `transcription_result` — orchestrator output with agent prompts
+- `browser_result` — `{ status, message }` from browser agent
+- `ide_result` — `{ agent, status, message }` from IDE agent
+- `audio_delta` — audio chunks from x.ai realtime API
+
+## Important Notes
+
+1. **CORS**: Backend allows all origins for development
+2. **Audio Format**: Frontend converts microphone input to PCM16 (24kHz mono)
+3. **Grok API compatibility**: Must use Chat Completions mode (`useResponses: false`), not the OpenAI Responses API
+4. **Tracing**: Disabled via env var — the OpenAI Agents SDK tracing hits `platform.openai.com` which rejects Grok API keys
+5. **IDE agent delegates coding** to CLI FunctionTools (unless `CODING_CLI=none`, in which case it codes directly via MCP)
+
+## Dependencies
+
+**Frontend**: React 19, Vite, Socket.IO-client, Axios
+**Backend**: Express, Socket.IO, ws, OpenAI Agents SDK (`@openai/agents`), OpenAI client (`openai`), Playwright, MCP SDK, dotenv, zod
