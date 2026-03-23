@@ -4,6 +4,7 @@ import type { AppContext } from '../context.js';
 import { getXAIConfig } from '../../core';
 import { ensureProvider } from '../provider.js';
 import logger from '../../core/logger.js';
+import { buildOrchestratorInstructions, type InstructionParts } from './instructions.js';
 
 // ── Translation tool ────────────────────────────────────────────────────────
 const translateTool = tool({
@@ -36,12 +37,13 @@ export interface OrchestratorOptions {
   browserAgent: Agent<AppContext>;
   ideAgent: Agent<AppContext>;
   plannerAgent: Agent<AppContext>;
+  extraHandoffs?: any[];
   readOnly?: boolean;
   plannerMode?: boolean;
   pendingPlan?: string;
 }
 
-export function createOrchestrator(opts: OrchestratorOptions): Agent<AppContext> {
+export async function createOrchestrator(opts: OrchestratorOptions): Promise<Agent<AppContext>> {
   ensureProvider();
 
   const readOnlyClause = opts.readOnly
@@ -61,31 +63,29 @@ Do NOT hand off to Browser Agent while in planner mode.`
     ? `\nThere is a pending implementation plan:\n${opts.pendingPlan}\nIf the user says "implement it", "do it", "let's go", "execute", "go ahead" — hand off to IDE Agent. If the user wants to refine the plan, hand off to Planner Agent.`
     : '';
 
+  // Auto-discover extension routing rules
+  let extraParts: Partial<InstructionParts> = {};
+  try {
+    const mod = await import('../extensions/routing.js');
+    extraParts = mod.default ?? {};
+  } catch { /* extensions not available — no-op */ }
+
+  const instructions = buildOrchestratorInstructions({
+    readOnlyClause,
+    plannerModeClause,
+    pendingPlanClause,
+    ...extraParts,
+  });
+
   return new Agent<AppContext>({
     name: 'Orchestrator',
-    instructions: `You are an Orchestrator Agent for a voice-controlled IDE.
-
-Your role: analyze transcribed user speech, translate it to English if needed (use the translate_to_english tool), then hand off to the right specialized agent.
-
-## Routing rules:
-- Planning/design requests ("plan", "design", "think about", "how should we", "let's discuss", "new feature", "open the planner") → hand off to **Planner Agent** ONLY
-- Implementation triggers ("implement it", "do it", "let's go", "execute", "build it") → hand off to **IDE Agent**
-- Direct IDE actions (open, search, navigate, run, edit code) → hand off to **IDE Agent**
-- Web/browser actions (browse, search web, open URL, scroll, click, close tab, close browser, open browser, go back, go forward) → hand off to **Browser Agent**
-- Refinement of an existing plan ("also add logging", "skip the tests") → hand off to **Planner Agent**
-- Greetings with no actionable request → respond directly, no handoff
-
-## Process:
-1. First, use translate_to_english to translate the user's speech to English
-2. Then hand off to the appropriate agent with a clear, actionable English prompt
-
-IMPORTANT: When the user asks to plan or design something, hand off ONLY to Planner Agent — even if they mention code/files/IDE. Planning always goes to planner first.
-${readOnlyClause}${plannerModeClause}${pendingPlanClause}`,
+    instructions,
     // tools: [translateTool],
     handoffs: [
       handoff(opts.browserAgent, { toolDescriptionOverride: 'Hand off to Browser Agent for web browsing, navigation, searching, clicking, scrolling, and page interaction.' }),
       handoff(opts.ideAgent, { toolDescriptionOverride: 'Hand off to IDE Agent for coding, file editing, IDE navigation, running commands, and project management.' }),
       handoff(opts.plannerAgent, { toolDescriptionOverride: 'Hand off to Planner Agent for designing implementation plans, architecture discussions, and feature planning.' }),
+      ...(opts.extraHandoffs ?? []),
     ],
     model: getXAIConfig().model,
   });

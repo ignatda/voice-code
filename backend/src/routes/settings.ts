@@ -28,7 +28,7 @@ router.post('/', (req, res) => {
   }
 
   // Only allow known safe keys to be written
-  const allowed = new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'PORT', 'CODING_CLI', 'IDE_TYPE']);
+  const allowed = new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'PORT', 'CODING_CLI', 'IDE_TYPE', 'EXTENSIONS', 'SCHEDULED_TASKS']);
   const invalid = Object.keys(updates).filter(k => !allowed.has(k));
   if (invalid.length) {
     res.status(400).json({ error: `Disallowed keys: ${invalid.join(', ')}` });

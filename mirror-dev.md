@@ -349,18 +349,18 @@ All hooks are `try/catch` with silent fallback — community repo works without 
 ## Status
 
 - [ ] Phase 1: Git setup
-- [ ] Phase 2: Extensions directory structure
-- [ ] Phase 3a: Extract `buildOrchestratorInstructions()`
-- [ ] Phase 3b: Auto-discovery hook in orchestrator
-- [ ] Phase 3c: Extensions routing file
-- [ ] Phase 4: Agent graph auto-discovery
-- [ ] Phase 5a: Backend settings for `EXTENSIONS` and `SCHEDULED_TASKS`
-- [ ] Phase 5b: Frontend settings UI
-- [ ] Phase 5c: Extensions read setting
-- [ ] Phase 5d: Example extension agent
-- [ ] Phase 6a: Task registry + FunctionTool
-- [ ] Phase 6b: Extension tasks file
-- [ ] Phase 7a: Scheduler core + example schedule
-- [ ] Phase 7b: Auto-discovery hook for extension schedules
-- [ ] Phase 7c: Extension schedules file
+- [x] Phase 2: Extensions directory structure
+- [x] Phase 3a: Extract `buildOrchestratorInstructions()`
+- [x] Phase 3b: Auto-discovery hook in orchestrator
+- [x] Phase 3c: Extensions routing file
+- [x] Phase 4: Agent graph auto-discovery
+- [x] Phase 5a: Backend settings for `EXTENSIONS` and `SCHEDULED_TASKS`
+- [x] Phase 5b: Frontend settings UI
+- [x] Phase 5c: Extensions read setting
+- [x] Phase 5d: Example extension agent
+- [x] Phase 6a: Task registry + FunctionTool
+- [x] Phase 6b: Extension tasks file
+- [x] Phase 7a: Scheduler core + example schedule
+- [x] Phase 7b: Auto-discovery hook for extension schedules
+- [x] Phase 7c: Extension schedules file
 - [ ] Phase 8: First sync cycle test

@@ -29,10 +29,18 @@ export async function buildAgentGraph(opts?: {
   const ide = await createIDEAgent(readOnly);
   const planner = createPlannerAgent();
 
-  const orchestrator = createOrchestrator({
+  // Auto-discover extension agents
+  let extraHandoffs: any[] = [];
+  try {
+    const { registerExtensions } = await import('./extensions/index.js');
+    extraHandoffs = await registerExtensions({ browser, ide, planner });
+  } catch { /* extensions not available */ }
+
+  const orchestrator = await createOrchestrator({
     browserAgent: browser,
     ideAgent: ide,
     plannerAgent: planner,
+    extraHandoffs,
     readOnly: opts?.readOnly,
     plannerMode: opts?.plannerMode,
     pendingPlan: opts?.pendingPlan,

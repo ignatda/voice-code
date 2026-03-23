@@ -13,6 +13,8 @@ export default function Settings() {
     PORT: settings.PORT || '5000',
     CODING_CLI: settings.CODING_CLI || 'opencode',
     IDE_TYPE: settings.IDE_TYPE || 'jetbrains',
+    EXTENSIONS: settings.EXTENSIONS || 'none',
+    SCHEDULED_TASKS: settings.SCHEDULED_TASKS || 'none',
   }), [settings]);
 
   const [form, setForm] = useState(initial);
@@ -64,6 +66,16 @@ export default function Settings() {
             <option value="vscode">VS Code</option>
             <option value="none">none (no IDE)</option>
           </select>
+        </label>
+
+        <label>
+          Extensions
+          <input type="text" value={form.EXTENSIONS} onChange={set('EXTENSIONS')} placeholder="none, example, or comma-separated names" />
+        </label>
+
+        <label>
+          Scheduled Tasks
+          <input type="text" value={form.SCHEDULED_TASKS} onChange={set('SCHEDULED_TASKS')} placeholder="none, or comma-separated task names" />
         </label>
 
         <div className="settings-actions">

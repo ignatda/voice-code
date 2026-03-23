@@ -62,6 +62,8 @@ export function getSettingsSnapshot(): Record<string, string> {
     PORT: process.env.PORT || '5000',
     CODING_CLI: process.env.CODING_CLI || 'opencode',
     IDE_TYPE: process.env.IDE_TYPE || 'jetbrains',
+    EXTENSIONS: process.env.EXTENSIONS || 'none',
+    SCHEDULED_TASKS: process.env.SCHEDULED_TASKS || 'none',
   };
 }
 
