@@ -232,3 +232,68 @@ import { ensureProvider } from '../provider.js';
 
 **Frontend**: React 19, Vite, Socket.IO-client, Axios
 **Backend**: Express, Socket.IO, ws, OpenAI Agents SDK (`@openai/agents`), OpenAI client (`openai`), Playwright, MCP SDK, dotenv, zod
+
+## Git Workflow for AI Coding Agents
+
+This project uses a two-remote setup with a branching strategy for private extensions. AI agents must follow these rules when committing code.
+
+### Repository Layout
+
+- `upstream` — community public repo (`voice-code`)
+- `origin` — private repo (`voice-code-private`)
+- `main` branch — community code, synced to both remotes
+- `extensions` branch — private extensions, pushed to `origin` only
+
+### What Goes Where
+
+| Change type | Branch | Push to | Example |
+|---|---|---|---|
+| Core agents, shared tools, bug fixes | `main` | `upstream` + `origin` | `agents/orchestrator/`, `agents/ide/`, `core/` |
+| Extension agents, private routing, private tasks | `extensions` | `origin` only | `agents/extensions/your-agent/` |
+| Auto-discovery hooks (added once) | `main` | `upstream` + `origin` | `try { import('./extensions/...') } catch {}` |
+| Docs (README, AGENTS.md) | `main` | `upstream` + `origin` | — |
+
+### Rules for the `extensions/` Directory
+
+- `agents/extensions/index.ts`, `routing.ts`, `example/` — **community code** on `main`, pushed to both remotes
+- Any new agent directories under `extensions/` (e.g. `extensions/my-agent/`) — **private code** on `extensions` branch, pushed to `origin` only
+- `extensions/tasks.ts`, `extensions/schedules.ts` — exist on both branches; community version has empty placeholders, `extensions` branch has actual entries
+- **Never modify community files on the `extensions` branch** — only add files in `agents/extensions/`
+
+### Commit Workflow
+
+**When working on community code (on `main`):**
+```bash
+git checkout main
+# ... make changes to core agents, shared code, docs ...
+git add -A && git commit -m "feat: description"
+git push upstream main
+git push origin main
+```
+
+**When working on private extensions (on `extensions`):**
+```bash
+git checkout extensions
+# ... add/modify files ONLY in agents/extensions/ ...
+git add -A && git commit -m "feat(ext): description"
+git push origin extensions
+# NEVER push extensions branch to upstream
+```
+
+**After community updates land on `main`:**
+```bash
+git checkout main
+git pull upstream main
+git push origin main
+git checkout extensions
+git rebase main
+git push origin extensions --force-with-lease
+```
+
+### Conflict Prevention
+
+1. Extension code lives **only** in `agents/extensions/` — never edit shared files on the `extensions` branch
+2. Community auto-discovery hooks use `try/catch` dynamic `import()` — they silently skip when extensions are absent
+3. The orchestrator prompt is composable — extensions inject routing via `InstructionParts`, never edit the base prompt
+4. Rebase (not merge) `extensions` onto `main` to keep linear history
+

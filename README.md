@@ -151,6 +151,61 @@ All decision-making lives in agent prompts, never in application code. Code defi
 
 See [AGENTS.md](AGENTS.md) for detailed guidelines.
 
+## Setting Up an Extensions Fork
+
+To maintain private extensions that stay in sync with the community repo:
+
+1. Create a new private repo on GitHub (empty, no README).
+
+2. Set up two remotes and an extensions branch:
+
+```bash
+cd voice-code
+
+# Rename community remote to "upstream"
+git remote rename origin upstream
+
+# Add your private repo as "origin"
+git remote add origin https://github.com/<your-org>/<your-private-repo>.git
+
+# Push main to private repo
+git push -u origin main
+
+# Create and push the extensions branch
+git checkout -b extensions
+git push -u origin extensions
+git checkout main
+```
+
+3. Verify:
+
+```bash
+git remote -v
+# origin    https://github.com/<your-org>/<your-private-repo>.git (fetch/push)
+# upstream  https://github.com/<original-org>/voice-code.git (fetch/push)
+
+git branch -a
+# * main
+#   extensions
+#   remotes/origin/main
+#   remotes/origin/extensions
+#   remotes/upstream/main
+```
+
+### Daily Workflow
+
+- `main` branch — community code, push to both remotes
+- `extensions` branch — private extensions, push to `origin` only, rebase on `main`
+
+```bash
+# Pull community updates
+git checkout main && git pull upstream main && git push origin main
+git checkout extensions && git rebase main && git push origin extensions --force-with-lease
+
+# Push community contributions
+git checkout main && git push upstream main && git push origin main
+```
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
