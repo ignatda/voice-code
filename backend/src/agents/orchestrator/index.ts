@@ -1,7 +1,7 @@
 import { Agent, handoff, tool } from '@openai/agents';
 import { z } from 'zod';
 import type { AppContext } from '../context.js';
-import { getXAIConfig } from '../../core/config.js';
+import { getXAIConfig } from '../../core';
 import { ensureProvider } from '../provider.js';
 import logger from '../../core/logger.js';
 
@@ -71,7 +71,7 @@ Your role: analyze transcribed user speech, translate it to English if needed (u
 - Planning/design requests ("plan", "design", "think about", "how should we", "let's discuss", "new feature", "open the planner") → hand off to **Planner Agent** ONLY
 - Implementation triggers ("implement it", "do it", "let's go", "execute", "build it") → hand off to **IDE Agent**
 - Direct IDE actions (open, search, navigate, run, edit code) → hand off to **IDE Agent**
-- Web/browser actions (browse, search web, open URL, scroll, click) → hand off to **Browser Agent**
+- Web/browser actions (browse, search web, open URL, scroll, click, close tab, close browser, open browser, go back, go forward) → hand off to **Browser Agent**
 - Refinement of an existing plan ("also add logging", "skip the tests") → hand off to **Planner Agent**
 - Greetings with no actionable request → respond directly, no handoff
 
