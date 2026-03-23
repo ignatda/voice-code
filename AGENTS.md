@@ -49,6 +49,11 @@ backend/src/
 │   ├── voice/
 │   │   └── index.ts            # Native WebSocket (x.ai Realtime API)
 │   │
+│   ├── extensions/             # Optional extension agents (auto-discovered)
+│   │   ├── index.ts            # registerExtensions() — dynamic agent registration
+│   │   ├── routing.ts          # Extra orchestrator routing rules
+│   │   └── example/            # Example extension (disabled by default)
+│   │
 │   └── ide/
 │       ├── index.ts            # SDK Agent factory (createIDEAgent)
 │       ├── mcp/
@@ -156,7 +161,8 @@ docker-compose up --build
 
 ### General Principles
 
-1. **Clean, maintainable code** with proper error handling
+1. **Declarative code, agent decisions** — all decision-making lives in agent prompts, never in application code. Code defines tools and wires agents; agents decide routing, parameters, and when to act. No `if/else` business logic in TS — tools are capabilities, agents choose when to use them.
+2. **Clean, maintainable code** with proper error handling
 2. **Well-documented** with clear comments for complex logic
 3. **Follow existing patterns** in the codebase
 4. **Use TypeScript types** in backend
@@ -206,6 +212,7 @@ import { ensureProvider } from '../provider.js';
 - Access via `process.env` in Node.js, `import.meta.env` in Vite
 - `CODING_CLI` — switch between `opencode`, `kiro-cli`, or `none`
 - `IDE_TYPE` — switch between `jetbrains`, `vscode`, or `none`
+- `EXTENSIONS` — comma-separated list of extension names to enable, or `none` (default)
 
 **Socket.IO Events**:
 - `transcription_result` — orchestrator output with agent prompts

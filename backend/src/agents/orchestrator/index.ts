@@ -81,7 +81,7 @@ Your role: analyze transcribed user speech, translate it to English if needed (u
 
 IMPORTANT: When the user asks to plan or design something, hand off ONLY to Planner Agent — even if they mention code/files/IDE. Planning always goes to planner first.
 ${readOnlyClause}${plannerModeClause}${pendingPlanClause}`,
-    tools: [translateTool],
+    // tools: [translateTool],
     handoffs: [
       handoff(opts.browserAgent, { toolDescriptionOverride: 'Hand off to Browser Agent for web browsing, navigation, searching, clicking, scrolling, and page interaction.' }),
       handoff(opts.ideAgent, { toolDescriptionOverride: 'Hand off to IDE Agent for coding, file editing, IDE navigation, running commands, and project management.' }),
