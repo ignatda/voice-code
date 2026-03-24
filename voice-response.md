@@ -88,8 +88,9 @@ New env vars in `.env`:
 | Variable | Values | Default | Description |
 |---|---|---|---|
 | `TTS_PROVIDER` | `xai`, `groq`, `gemini`, `none` | (same as STT_PROVIDER) | TTS provider |
-| `TTS_ENABLED` | `true`, `false` | `true` | Master TTS toggle |
 | `TTS_MAX_LENGTH` | number | `500` | Skip TTS for responses longer than this (chars) |
+
+TTS is toggled at runtime per-session via the `set_tts_enabled` Socket.IO event (like read-only mode), not via env var.
 
 ### Frontend
 
@@ -146,61 +147,58 @@ In `App.jsx` — add Web Audio API playback:
 - [x] Export TTS types from `agents/voice/index.ts`
 
 ### Phase 3: x.ai TTS transport
-- [ ] Create `agents/voice/tts/xai.ts` implementing `TTSTransport`
-- [ ] Implement `synthesize()` — POST to `/v1/audio/speech`, stream response body
-- [ ] Chunk response into base64 PCM16 segments, emit via `onAudioChunk`
-- [ ] Handle errors (non-200, network failures) via `onError`
+- [x] Create `agents/voice/tts/xai.ts` implementing `TTSTransport`
+- [x] Implement `synthesize()` — POST to `/v1/tts`, return full MP3 response
+- [x] Emit response as base64 via `onAudioChunk`
+- [x] Handle errors (non-200, network failures) via `onError`
 - [ ] Test with a hardcoded string to verify audio output format
 
 ### Phase 4: TTS factory
-- [ ] Create `agents/voice/tts/index.ts` with `createTTSClient()` factory
-- [ ] Wire provider selection logic (read `TTS_PROVIDER` env var)
-- [ ] Re-export from `agents/voice/index.ts`
+- [x] Create `agents/voice/tts/index.ts` with `createTTSClient()` factory
+- [x] Wire provider selection logic (read `TTS_PROVIDER` env var)
+- [x] Re-export from `agents/voice/index.ts`
 
 ### Phase 5: Backend configuration
-- [ ] Add `TTS_PROVIDER`, `TTS_ENABLED`, `TTS_MAX_LENGTH` to `core/config.ts` settings snapshot
-- [ ] Add new env vars to `.env.example` with comments
-- [ ] Add `getTTSApiKey()` helper in `router.ts` (mirror `getSttApiKey()` pattern)
+- [x] Add `TTS_PROVIDER`, `TTS_ENABLED`, `TTS_MAX_LENGTH` to `core/config.ts` settings snapshot
+- [x] Add new env vars to `.env.example` with comments
+- [x] Add `getTtsApiKey()` helper in `router.ts` (mirror `getSttApiKey()` pattern)
 
 ### Phase 6: Router integration
-- [ ] Add `ttsClients: Map<string, TTSTransport>` and `ttsEnabled: Map<string, boolean>` maps
-- [ ] Create TTS client on `start_transcription_stream` (alongside STT client)
-- [ ] Set TTS callbacks: `onAudioChunk` → emit `voice_response_delta`, `onDone` → emit `voice_response_done`
-- [ ] Add `set_tts_enabled` socket handler to toggle per-session
-- [ ] In `processWithOrchestrator()`: after emitting agent result, call `synthesize(output)` only for Orchestrator agent (skip IDE Agent, Browser Agent, and Planner)
-- [ ] Capture Orchestrator handoff narration: when `lastAgent` is not Orchestrator, synthesize the Orchestrator's delegation message (not the final agent output)
-- [ ] Emit the handoff narration as text too (e.g. `ide_result` with `agent: 'orchestrator'`) so it appears in the chat UI alongside being spoken
-- [ ] Add length guard: skip TTS when `output.length > TTS_MAX_LENGTH`
-- [ ] Clean up TTS client on `stop_transcription_stream` and `disconnect`
-- [ ] Clean up TTS client on `stop_all`
+- [x] Add `ttsClients: Map<string, TTSTransport>` and `ttsEnabled: Map<string, boolean>` maps
+- [x] Create TTS client on `start_transcription_stream` (alongside STT client)
+- [x] Set TTS callbacks: `onAudioChunk` → emit `voice_response_delta`, `onDone` → emit `voice_response_done`
+- [x] Add `set_tts_enabled` socket handler to toggle per-session
+- [x] In `processWithOrchestrator()`: after emitting agent result, call `synthesize(output)` only for Orchestrator agent (skip IDE Agent, Browser Agent, and Planner)
+- [x] Capture Orchestrator handoff narration: when `lastAgent` is not Orchestrator, synthesize the Orchestrator's delegation message (not the final agent output)
+- [x] Emit the handoff narration as text too (e.g. `ide_result` with `agent: 'orchestrator'`) so it appears in the chat UI alongside being spoken
+- [x] Add length guard: skip TTS when `output.length > TTS_MAX_LENGTH`
+- [x] Clean up TTS client on `stop_transcription_stream` and `disconnect`
+- [x] Clean up TTS client on `stop_all`
 
 ### Phase 6a: Orchestrator prompt update
-- [ ] Update Orchestrator agent prompt: instruct it to always produce a brief spoken summary when delegating to another agent (e.g. "Sending this to the IDE agent to refactor the function")
-- [ ] Ensure the delegation message is emitted as a separate event before the handoff, so TTS can pick it up
+- [x] Update Orchestrator agent prompt: instruct it to always produce a brief spoken summary when delegating to another agent (e.g. "Sending this to the IDE agent to refactor the function")
+- [x] Ensure the delegation message is emitted as a separate event before the handoff, so TTS can pick it up
 
 ### Phase 7: Frontend — audio playback
-- [ ] Create AudioContext (24kHz sample rate) on first user interaction
-- [ ] Add `voice_response_delta` listener: decode base64 PCM16 → Float32 → queue AudioBuffer
-- [ ] Add `voice_response_done` listener: flush remaining buffer
-- [ ] Implement buffer queue with scheduled playback to avoid gaps between chunks
-- [ ] Auto-interrupt: stop playback when user starts speaking (microphone active)
+- [x] Add `voice_response_delta` listener: decode base64 MP3 → play via Audio element
+- [x] Auto-interrupt: stop playback when user starts speaking (microphone active)
 
 ### Phase 8: Frontend — UI controls
-- [ ] Add TTS toggle button (🔊/🔇) in voice controls area
-- [ ] Emit `set_tts_enabled` on toggle
-- [ ] Add visual indicator when TTS is playing (pulsing speaker icon or similar)
-- [ ] Persist toggle state in local storage
+- [x] Add TTS toggle button (🔊/🔇) in voice controls area
+- [x] Emit `set_tts_enabled` on toggle
+- [x] Add visual indicator when TTS is playing (pulsing speaker icon or similar)
+- [x] Persist toggle state in local storage
 
 ### Phase 9: Remaining TTS transports
-- [ ] Create `agents/voice/tts/groq.ts` — POST to `/openai/v1/audio/speech`
-- [ ] Create `agents/voice/tts/gemini.ts` — Gemini multimodal with audio output
-- [ ] Register both in `tts/index.ts` factory switch
+- [x] Create `agents/voice/tts/groq.ts` — POST to `/openai/v1/audio/speech`
+- [x] Create `agents/voice/tts/gemini.ts` — Gemini TTS with `generateContent` + `responseModalities: ["AUDIO"]`
+- [x] Register both in `tts/index.ts` factory switch
 - [ ] Test each transport manually
 
 ### Phase 10: Documentation & cleanup
-- [ ] Update `AGENTS.md` — add `voice_response_delta`, `voice_response_done`, `set_tts_enabled` to Socket.IO events table
-- [ ] Update `AGENTS.md` — update voice directory structure (`stt/`, `tts/`)
-- [ ] Update `README.md` — add `TTS_PROVIDER`, `TTS_ENABLED`, `TTS_MAX_LENGTH` to configuration table
+- [x] Update `AGENTS.md` — add `voice_response_delta`, `voice_response_done`, `set_tts_enabled` to Socket.IO events table
+- [x] Update `AGENTS.md` — update voice directory structure (`stt/`, `tts/`)
+- [x] Update `README.md` — add `TTS_PROVIDER`, `TTS_ENABLED`, `TTS_MAX_LENGTH` to configuration table
 - [ ] Update `voice-response.md` — mark plan as completed
 
 ## Edge Cases

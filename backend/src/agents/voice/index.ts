@@ -4,6 +4,7 @@ import type { VoiceTransport } from './types.js';
 import { XAITransport } from './stt/xai.js';
 import { GroqTransport } from './stt/groq.js';
 import { GeminiTransport } from './stt/gemini.js';
+export { createTTSClient } from './tts/index.js';
 
 export function createVoiceClient(provider: string, apiKey: string, sid: string): VoiceTransport {
   switch (provider) {

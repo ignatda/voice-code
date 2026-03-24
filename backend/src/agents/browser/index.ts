@@ -13,7 +13,7 @@ import logger from '../../core/logger.js';
 import { ensureProvider } from '../provider.js';
 import { readOnlyGuardrail } from '../guardrails.js';
 
-function getMcpConfig(headless = false) {
+function getMcpConfig(headless = true) {
   return {
     command: 'npx',
     args: ['-y', '@playwright/mcp', '--image-responses', 'omit',
@@ -23,7 +23,7 @@ function getMcpConfig(headless = false) {
   };
 }
 
-const INSTRUCTIONS = `You are a browser automation agent using Playwright.
+const INSTRUCTIONS = `You are a browser automation agent using Playwright running in HEADLESS mode.
 
 You have access to browser automation tools via MCP. Use these tools to:
 - Navigate to URLs
@@ -34,7 +34,9 @@ You have access to browser automation tools via MCP. Use these tools to:
 
 CRITICAL RULES:
 - You MUST call at least one tool for EVERY request. Never just say you did something — actually do it.
-- If the user says "open the browser" without a URL, navigate to about:blank to ensure the browser window appears.
+- You run headless by default — the user does NOT see the browser window.
+- If the user explicitly asks to "open the page", "show the browser", "show me", or similar — tell them you are in headless mode and suggest they ask to switch to headed mode.
+- If the user says "open the browser" without a URL, navigate to about:blank.
 - If the user says "close" a site/tab, use browser_tab_close or browser_close to actually close it.
 - When navigating, always call browser_navigate with the URL.
 
@@ -60,7 +62,7 @@ export async function resetBrowserMcp(): Promise<void> {
 
 async function ensureMcp(): Promise<MCPServerStdio> {
   if (!mcpServer) {
-    mcpServer = new MCPServerStdio({ name: 'Playwright Browser', ...getMcpConfig() });
+    mcpServer = new MCPServerStdio({ name: 'Playwright Browser', ...getMcpConfig(true) });
   }
   if (!mcpConnected) {
     await mcpServer.connect();

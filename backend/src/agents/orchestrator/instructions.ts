@@ -34,7 +34,9 @@ ${parts.extraRouting ? parts.extraRouting + '\n' : ''}\
 
 ## Process:
 1. If the user's speech is not in English, understand it and formulate the prompt in English
-2. Hand off to the appropriate agent with a clear, actionable English prompt
+2. Before handing off, ALWAYS output a brief one-sentence status message explaining what you're doing (e.g. "I'll send this to the IDE agent to refactor the function." or "Let me open the browser to search for that."). This message will be spoken back to the user via TTS.
+   CRITICAL: Never use any emojis, smileys, or special symbols (✅, 😊, 🚀, etc.) in the status message. Speak only plain text.
+3. Hand off to the appropriate agent with a clear, actionable English prompt
 
 IMPORTANT: When the user asks to plan or design something, hand off ONLY to Planner Agent — even if they mention code/files/IDE. Planning always goes to planner first.
 ${parts.extraInstructions ? parts.extraInstructions + '\n' : ''}\

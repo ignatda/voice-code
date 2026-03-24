@@ -6,7 +6,7 @@ import { createPlannerAgent } from './planner/index.js';
 import { createOrchestrator, isPlannerExit } from './orchestrator/index.js';
 
 export { ensureProvider } from './provider.js';
-export { readOnlyGuardrail } from './guardrails.js';
+export { readOnlyGuardrail, safetyAndOfftopicGuardrail } from './guardrails.js';
 export { isPlannerExit } from './orchestrator/index.js';
 export { killTerminalProcess } from './ide/index.js';
 export type { AppContext } from './context.js';

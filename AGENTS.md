@@ -47,7 +47,11 @@ backend/src/
 │   │   └── index.ts            # SDK Agent, no tools
 │   │
 │   ├── voice/
-│   │   └── index.ts            # Native WebSocket (x.ai Realtime API)
+│   │   ├── index.ts            # Re-exports, createVoiceClient, createTTSClient
+│   │   ├── types.ts            # VoiceTransport (STT) interface
+│   │   ├── tts-types.ts        # TTSTransport interface
+│   │   ├── stt/                # Speech-to-text transports (xai, groq, gemini)
+│   │   └── tts/                # Text-to-speech transports (xai, groq, gemini)
 │   │
 │   ├── extensions/             # Optional extension agents (auto-discovered)
 │   │   ├── index.ts            # registerExtensions() — dynamic agent registration
@@ -218,6 +222,9 @@ import { ensureProvider } from '../provider.js';
 - `transcription_result` — orchestrator output with agent prompts
 - `browser_result` — `{ status, message }` from browser agent
 - `ide_result` — `{ agent, status, message }` from IDE agent
+- `voice_response_delta` — `{ audio }` base64 audio chunk from TTS
+- `voice_response_done` — `{}` TTS finished for current response
+- `set_tts_enabled` — client → server, toggle TTS on/off
 - `audio_delta` — audio chunks from x.ai realtime API
 
 ## Important Notes

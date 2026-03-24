@@ -30,6 +30,10 @@ function MainApp() {
   const socketRef = useRef(null);
   const conversationEndRef = useRef(null);
   const promptInputRef = useRef(null);
+  const ttsAudioRef = useRef(null);
+  const [ttsEnabled, setTtsEnabled] = useState(() => localStorage.getItem('ttsEnabled') === 'true');
+  const [ttsPlaying, setTtsPlaying] = useState(false);
+  const ttsPlayingRef = useRef(false);
 
   const handleSessionSwitched = useCallback((data) => {
     setActiveSessionId(data.id);
@@ -60,7 +64,14 @@ function MainApp() {
       setStatus('idle');
     });
 
-    socketRef.current.on('status', (data) => setStatus(data.status));
+    socketRef.current.on('status', (data) => {
+      setStatus(data.status);
+      // Auto-interrupt TTS when user starts speaking
+      if (data.status === 'speaking' && ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
+      }
+    });
 
     socketRef.current.on('session_list', (list) => {
       setSessionList(list);
@@ -131,6 +142,39 @@ function MainApp() {
       setStatus('idle');
     });
 
+    socketRef.current.on('voice_response_delta', (data) => {
+      if (!data.audio) return;
+      const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
+      // Detect format: WAV starts with "RIFF", otherwise assume MP3
+      const isWav = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+      const blob = new Blob([bytes], { type: isWav ? 'audio/wav' : 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      // Stop any currently playing TTS
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        URL.revokeObjectURL(ttsAudioRef.current.src);
+      }
+      // Mute mic to prevent TTS feeding back into STT
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.enabled = false);
+      }
+      const audio = new Audio(url);
+      const resumeMic = () => {
+        URL.revokeObjectURL(url);
+        ttsPlayingRef.current = false;
+        setTtsPlaying(false);
+        if (audioStreamRef.current && micEnabledRef.current) {
+          audioStreamRef.current.getTracks().forEach(t => t.enabled = true);
+        }
+      };
+      audio.addEventListener('ended', resumeMic);
+      audio.addEventListener('pause', resumeMic);
+      ttsAudioRef.current = audio;
+      ttsPlayingRef.current = true;
+      setTtsPlaying(true);
+      audio.play().catch(() => resumeMic());
+    });
+
     return () => {
       if (socketRef.current) {
         socketRef.current.disconnect();
@@ -171,6 +215,8 @@ function MainApp() {
       socketRef.current.once('transcription_started', async () => {
         setMicEnabled(true);
         setError('');
+        // Send initial TTS enabled state
+        socketRef.current.emit('set_tts_enabled', localStorage.getItem('ttsEnabled') !== 'false');
 
         const audioContext = new AudioContext({ sampleRate: 24000 });
         const source = audioContext.createMediaStreamSource(stream);
@@ -180,7 +226,7 @@ function MainApp() {
         const workletNode = new AudioWorkletNode(audioContext, 'noise-cancelling-processor');
 
         workletNode.port.onmessage = (event) => {
-          if (event.data.type === 'audio') {
+          if (event.data.type === 'audio' && !ttsPlayingRef.current) {
             socketRef.current.emit('audio_chunk', event.data.data);
           }
         };
@@ -197,6 +243,13 @@ function MainApp() {
   };
 
   const disableMic = () => {
+    // Stop any playing TTS
+    if (ttsAudioRef.current) {
+      ttsAudioRef.current.pause();
+      ttsAudioRef.current = null;
+      ttsPlayingRef.current = false;
+      setTtsPlaying(false);
+    }
     if (audioContextRef.current) {
       const { audioContext, workletNode, source } = audioContextRef.current;
       if (workletNode) workletNode.disconnect();
@@ -226,6 +279,21 @@ function MainApp() {
       localStorage.setItem('readOnlyMode', String(next));
       if (socketRef.current?.connected) {
         socketRef.current.emit('set_read_only', next);
+      }
+      return next;
+    });
+  };
+
+  const toggleTts = () => {
+    setTtsEnabled(prev => {
+      const next = !prev;
+      localStorage.setItem('ttsEnabled', String(next));
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('set_tts_enabled', next);
+      }
+      if (!next && ttsAudioRef.current) {
+        ttsAudioRef.current.pause();
+        ttsAudioRef.current = null;
       }
       return next;
     });
@@ -278,7 +346,12 @@ function MainApp() {
         if (e.key === 'Enter') { e.preventDefault(); setSidebarOpen(false); setTimeout(() => promptInputRef.current?.focus(), 0); return; }
         if (e.key === 'Delete') {
           e.preventDefault();
-          if (activeSessionId && socketRef.current?.connected) socketRef.current.emit('delete_session', activeSessionId);
+          if (activeSessionId && socketRef.current?.connected) {
+            const idx = sessionList.findIndex(s => s.id === activeSessionId);
+            const neighbor = sessionList[idx + 1] || sessionList[idx - 1];
+            socketRef.current.emit('delete_session', activeSessionId);
+            if (neighbor) switchSession(neighbor.id);
+          }
           return;
         }
         if (e.key === 'n' || e.key === 'N') { e.preventDefault(); createNewSession(); return; }
@@ -293,6 +366,7 @@ function MainApp() {
         }
         if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMic(); return; }
         if (e.key === 'r' || e.key === 'R') { e.preventDefault(); toggleReadOnly(); return; }
+        if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleTts(); return; }
         if (e.key === ',') { e.preventDefault(); navigate('/settings'); return; }
         if (e.key === 'x' || e.key === 'X') { e.preventDefault(); stopAll(); return; }
       }
@@ -373,6 +447,22 @@ function MainApp() {
                   <path fill="currentColor" d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
                   <path fill="currentColor" d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
                   <line x1="3" y1="3" x2="21" y2="21" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                </svg>
+              )}
+            </button>
+
+            <button
+              className={`tts-toggle${ttsEnabled ? ' active' : ''}${ttsPlaying ? ' playing' : ''}`}
+              onClick={toggleTts}
+              title={ttsEnabled ? 'Disable voice responses (Ctrl+Alt+V)' : 'Enable voice responses (Ctrl+Alt+V)'}
+            >
+              {ttsEnabled ? (
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="20" height="20">
+                  <path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51A8.796 8.796 0 0021 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06a8.99 8.99 0 003.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>
                 </svg>
               )}
             </button>

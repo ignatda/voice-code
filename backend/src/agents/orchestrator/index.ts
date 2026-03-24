@@ -9,6 +9,7 @@ const MODELS: Record<string, string> = {
   groq:   'openai/gpt-oss-20b',
 };
 import { ensureProvider } from '../provider.js';
+import { readOnlyGuardrail, safetyAndOfftopicGuardrail } from '../guardrails.js';
 import { buildOrchestratorInstructions, type InstructionParts } from './instructions.js';
 
 // ── Orchestrator factory ────────────────────────────────────────────────────
@@ -70,6 +71,10 @@ Do NOT hand off to Browser Agent while in planner mode.`
       ...(opts.extraHandoffs ?? []),
     ],
     model: agentModel,
+    inputGuardrails: [
+      safetyAndOfftopicGuardrail,
+      ...(opts.readOnly ? [readOnlyGuardrail] : []),
+    ],
   });
 }
 

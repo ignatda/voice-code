@@ -32,6 +32,7 @@ export default function Settings() {
     GEMINI_API_KEY: '',
     GROQ_API_KEY: '',
     STT_PROVIDER: settings.STT_PROVIDER || 'xai',
+    TTS_PROVIDER: settings.TTS_PROVIDER || 'xai',
     PORT: settings.PORT || '5000',
     CODING_CLI: settings.CODING_CLI || 'opencode',
     IDE_TYPE: settings.IDE_TYPE || 'jetbrains',
@@ -97,6 +98,17 @@ export default function Settings() {
             <option value="gemini">Gemini (batch, free)</option>
           </select>
           <span className="settings-hint">xAI = real-time streaming, Groq/Gemini = slight delay but free tier</span>
+        </label>
+
+        <label>
+          TTS Provider
+          <select value={form.TTS_PROVIDER} onChange={set('TTS_PROVIDER')}>
+            <option value="xai">xAI</option>
+            <option value="groq">Groq (Orpheus)</option>
+            <option value="gemini">Gemini</option>
+            <option value="none">Disabled</option>
+          </select>
+          <span className="settings-hint">TTS is toggled on/off per-session via the 🔊 button.</span>
         </label>
 
         <label>

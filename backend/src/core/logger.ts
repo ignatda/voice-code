@@ -12,4 +12,9 @@ const logger = pino({
   }),
 });
 
+export function logOrchestratorError(sessionId: string, error: unknown): void {
+  const msg = error instanceof Error ? error.message : String(error);
+  logger.error({ sid: sessionId, error: msg }, `[orchestrator] ${msg}`);
+}
+
 export default logger;

@@ -2,12 +2,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { Runner } from '@openai/agents';
 import type { Server } from 'socket.io';
-import logger from './core/logger.js';
+import logger, { logOrchestratorError } from './core/logger.js';
 import { getXAIConfig } from './core/config.js';
 import { resetRotation, rotateProvider, getCurrentModel, getCurrentProviderName } from './core/providers.js';
 import { SessionStore } from './core/session.js';
 import { createSignal, abortAll, cleanup, isStopCommand } from './core/interrupt.js';
-import { createVoiceClient, type VoiceTransport } from './agents/voice/index.js';
+import { createVoiceClient, createTTSClient, type VoiceTransport, type TTSTransport } from './agents/voice/index.js';
 import { buildAgentGraph, killTerminalProcess, isPlannerExit } from './agents/index.js';
 import type { AppContext } from './agents/index.js';
 
@@ -35,10 +35,19 @@ const getSttApiKey = () => {
   return process.env.XAI_API_KEY;
 };
 
+const getTtsApiKey = () => {
+  const provider = process.env.TTS_PROVIDER || process.env.STT_PROVIDER || 'xai';
+  if (provider === 'groq') return process.env.GROQ_API_KEY;
+  if (provider === 'gemini') return process.env.GEMINI_API_KEY;
+  return process.env.XAI_API_KEY;
+};
+
 const socketSession = new Map<string, string>();
 const statusMap = new Map<string, string>();
 const readOnlyMap = new Map<string, boolean>();
 const voiceClients = new Map<string, VoiceTransport>();
+const ttsClients = new Map<string, TTSTransport>();
+const ttsEnabled = new Map<string, boolean>();
 const pendingPlans = new Map<string, string>();
 const plannerMode = new Map<string, boolean>();
 
@@ -47,12 +56,23 @@ const STOP_SCRIPT = path.resolve(__dirname, 'agents', 'ide', 'tools', 'stop.sh')
 function killAll(sid: string): void {
   abortAll(sid);
   killTerminalProcess();
+  const tts = ttsClients.get(sid);
+  if (tts) { tts.close(); ttsClients.delete(sid); }
   import('child_process').then(({ execFile }) => {
     execFile(STOP_SCRIPT, (err) => {
       if (err) logger.error(ctx(sid), `[stop] stop.sh error: ${err.message}`);
       else logger.info(ctx(sid), '[stop] stop.sh executed');
     });
   });
+}
+
+async function speakIfEnabled(sid: string, text: string, io: Server): Promise<void> {
+  if (!ttsEnabled.get(sid)) return;
+  const maxLen = parseInt(process.env.TTS_MAX_LENGTH || '500', 10);
+  if (text.length > maxLen) return;
+  const tts = ttsClients.get(sid);
+  if (!tts) return;
+  await tts.synthesize(text);
 }
 
 function getActiveSessionId(socketId: string): string | undefined {
@@ -160,6 +180,29 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
     const output = result.finalOutput || '';
     const lastAgentName = result.lastAgent?.name || 'Orchestrator';
 
+    if (!output && lastAgentName === 'Orchestrator') {
+      const fallback = 'Sorry, I couldn\'t process that request. Could you try rephrasing?';
+      io.to(sid).emit('ide_result', { agent: 'orchestrator', status: 'success', message: fallback, received_prompt: transcription });
+      if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'orchestrator', text: fallback });
+      await speakIfEnabled(sid, fallback, io);
+      return;
+    }
+
+    // Extract orchestrator narration when a handoff occurred
+    let orchestratorNarration = '';
+    if (lastAgentName !== 'Orchestrator') {
+      for (const item of result.newItems || []) {
+        if (item.type === 'message_output_item' && item.agent?.name === 'Orchestrator') {
+          const content = (item as any).rawItem?.content;
+          if (Array.isArray(content)) {
+            for (const c of content) {
+              if (c.type === 'output_text' && c.text) orchestratorNarration = c.text;
+            }
+          }
+        }
+      }
+    }
+
     logger.info(ctx(sid), `[run] Completed. provider=${getCurrentProviderName()}, lastAgent=${lastAgentName}, output_len=${output.length}, output_preview=${JSON.stringify(output.slice(0, 200))}`);
 
     if (isPlannerExit(output) && sessionId) {
@@ -170,9 +213,19 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
     }
 
     if (lastAgentName === 'Browser Agent') {
+      if (orchestratorNarration) {
+        io.to(sid).emit('ide_result', { agent: 'orchestrator', status: 'success', message: orchestratorNarration });
+        if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'orchestrator', text: orchestratorNarration });
+        await speakIfEnabled(sid, orchestratorNarration, io);
+      }
       io.to(sid).emit('browser_result', { status: 'success', message: output });
       if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'browser', text: output });
     } else if (lastAgentName === 'Planner Agent') {
+      if (orchestratorNarration) {
+        io.to(sid).emit('ide_result', { agent: 'orchestrator', status: 'success', message: orchestratorNarration });
+        if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'orchestrator', text: orchestratorNarration });
+        await speakIfEnabled(sid, orchestratorNarration, io);
+      }
       if (sessionId) {
         plannerMode.set(sessionId, true);
         pendingPlans.set(sessionId, output);
@@ -180,6 +233,11 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       io.to(sid).emit('ide_result', { agent: 'planner', status: 'success', message: output, received_prompt: transcription });
       if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'planner', text: output });
     } else if (lastAgentName === 'IDE Agent') {
+      if (orchestratorNarration) {
+        io.to(sid).emit('ide_result', { agent: 'orchestrator', status: 'success', message: orchestratorNarration });
+        if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'orchestrator', text: orchestratorNarration });
+        await speakIfEnabled(sid, orchestratorNarration, io);
+      }
       if (sessionId) {
         pendingPlans.delete(sessionId);
         plannerMode.delete(sessionId);
@@ -189,6 +247,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
     } else {
       io.to(sid).emit('ide_result', { agent: 'orchestrator', status: 'success', message: output, received_prompt: transcription });
       if (sessionId) session.addDisplayItem({ type: 'agent', agent: 'orchestrator', text: output });
+      await speakIfEnabled(sid, output, io);
     }
   } catch (error) {
     if (signal.aborted) {
@@ -197,9 +256,14 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       return;
     }
     const errMsg = formatError(error);
-    logger.error(ctx(sid), `[run] Error: ${errMsg}`);
-    io.to(sid).emit('ide_result', { agent: 'ide', status: 'error', message: errMsg, received_prompt: transcription });
-    if (sessionId) session.addDisplayItem({ type: 'system', text: `Error: ${errMsg}` });
+    logOrchestratorError(sid, error);
+    const userMessage = 'Something went wrong while processing your request. Please try again.';
+    io.to(sid).emit('orchestrator_error', { message: userMessage, detail: errMsg });
+    io.to(sid).emit('ide_result', { agent: 'orchestrator', status: 'error', message: userMessage, received_prompt: transcription });
+    if (sessionId) {
+      session.setLastError(errMsg);
+      session.addDisplayItem({ type: 'system', text: `Error: ${errMsg}` });
+    }
   }
 }
 
@@ -275,6 +339,22 @@ export function registerSocketHandlers(io: Server): void {
       try {
         await voiceClient.connect();
         voiceClients.set(sid, voiceClient);
+
+        // Create TTS client alongside STT
+        const ttsProvider = process.env.TTS_PROVIDER || process.env.STT_PROVIDER || 'xai';
+        const ttsApiKey = getTtsApiKey();
+        if (ttsApiKey && ttsProvider !== 'none') {
+          const ttsClient = createTTSClient(ttsProvider, ttsApiKey, sid);
+          ttsClient.setCallbacks(
+            (audio) => io.to(sid).emit('voice_response_delta', { audio }),
+            () => io.to(sid).emit('voice_response_done', {}),
+            (error) => logger.error(ctx(sid), `[tts] Error: ${error}`),
+          );
+          ttsClients.set(sid, ttsClient);
+          ttsEnabled.set(sid, false);
+          logger.info(ctx(sid), `[tts] Client created (provider=${ttsProvider})`);
+        }
+
         socket.emit('transcription_started', { message: 'Connected to STT provider and ready for audio.' });
         socket.emit('status', { status: 'idle' });
         logger.info(ctx(sid), '[socketio] Transcription stream started');
@@ -310,7 +390,15 @@ export function registerSocketHandlers(io: Server): void {
       } else {
         socket.emit('error', { message: 'No active transcription stream to stop.' });
       }
+      const tts = ttsClients.get(sid);
+      if (tts) { tts.close(); ttsClients.delete(sid); }
+      ttsEnabled.delete(sid);
       statusMap.delete(sid);
+    });
+
+    socket.on('set_tts_enabled', (value: boolean) => {
+      ttsEnabled.set(sid, value);
+      logger.info(ctx(sid), `[tts] Enabled set to ${value}`);
     });
 
     socket.on('manual_prompt', (text: string) => {
@@ -342,6 +430,9 @@ export function registerSocketHandlers(io: Server): void {
       }
       statusMap.delete(sid);
       readOnlyMap.delete(sid);
+      const tts = ttsClients.get(sid);
+      if (tts) { tts.close(); ttsClients.delete(sid); }
+      ttsEnabled.delete(sid);
     });
   });
 }

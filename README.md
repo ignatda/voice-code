@@ -42,6 +42,8 @@ Settings are managed via environment variables (`.env`) or the Settings UI at ru
 | `IDE_TYPE` | `jetbrains`, `vscode`, `none` | `jetbrains` | IDE integration |
 | `CODING_CLI` | `opencode`, `kiro-cli`, `none` | `opencode` | CLI tool for coding tasks |
 | `EXTENSIONS` | comma-separated names or `none` | `none` | Enable extension agents |
+| `TTS_PROVIDER` | `xai`, `groq`, `gemini`, `none` | (same as STT_PROVIDER) | TTS provider |
+| `TTS_MAX_LENGTH` | number | `500` | Skip TTS for long responses |
 | `PORT` | number | `5000` | Backend server port |
 
 ## Extensions

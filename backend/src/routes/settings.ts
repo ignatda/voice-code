@@ -30,7 +30,7 @@ router.post('/', (req, res) => {
   }
 
   // Only allow known safe keys to be written
-  const allowed = new Set(['LLM_PROVIDERS', 'XAI_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'STT_PROVIDER', 'PORT', 'CODING_CLI', 'IDE_TYPE', 'EXTENSIONS', 'SCHEDULED_TASKS']);
+  const allowed = new Set(['LLM_PROVIDERS', 'XAI_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'STT_PROVIDER', 'TTS_PROVIDER', 'PORT', 'CODING_CLI', 'IDE_TYPE', 'EXTENSIONS', 'SCHEDULED_TASKS']);
   const invalid = Object.keys(updates).filter(k => !allowed.has(k));
   if (invalid.length) {
     res.status(400).json({ error: `Disallowed keys: ${invalid.join(', ')}` });

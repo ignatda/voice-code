@@ -463,6 +463,41 @@ body {
   background-color: rgba(255, 152, 0, 0.1);
 }
 
+.tts-toggle {
+  background: transparent;
+  border: 2px solid #555;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #555;
+  transition: all 0.2s ease;
+}
+
+.tts-toggle:hover {
+  border-color: #888;
+  color: #888;
+}
+
+.tts-toggle.active {
+  border-color: #4caf50;
+  color: #4caf50;
+  background-color: rgba(76, 175, 80, 0.1);
+}
+
+.tts-toggle.playing {
+  animation: tts-pulse 1s ease-in-out infinite;
+}
+
+@keyframes tts-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4); }
+  50% { box-shadow: 0 0 0 8px rgba(76, 175, 80, 0); }
+}
+
 /* Read-only mode: visual indicator */
 .App.read-only .terminal-body {
   border-color: #ff9800;

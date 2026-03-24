@@ -25,6 +25,8 @@ interface SessionMeta {
   displayItems: ConversationItem[];
   /** User input history for up-arrow recall */
   inputHistory?: string[];
+  /** Last error for debugging and recovery */
+  lastError?: string;
 }
 
 // ── File paths ──────────────────────────────────────────────────────────────
@@ -131,6 +133,18 @@ export class SessionStore implements SDKSession {
   /** Get user input history for up-arrow recall. */
   getInputHistory(): string[] {
     return this.getMeta().inputHistory || [];
+  }
+
+  /** Record the last error for debugging. */
+  setLastError(error: string): void {
+    const meta = this.getMeta();
+    meta.lastError = error;
+    this.saveMeta(meta);
+  }
+
+  /** Get the last recorded error. */
+  getLastError(): string | undefined {
+    return this.getMeta().lastError;
   }
 
   // ── Static helpers ────────────────────────────────────────────────────
