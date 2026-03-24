@@ -95,11 +95,8 @@ export class GroqTransport implements VoiceTransport {
     const modelPart = Buffer.from(
       `\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-large-v3`
     );
-    const langPart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nen`
-    );
     const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat([header, wav, modelPart, langPart, footer]);
+    const body = Buffer.concat([header, wav, modelPart, footer]);
 
     const res = await fetch(GROQ_TRANSCRIPTION_URL, {
       method: 'POST',

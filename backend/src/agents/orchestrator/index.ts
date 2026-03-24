@@ -7,7 +7,7 @@ import { getAgentModel } from '../../core/providers.js';
 // Orchestrator = fast routing, no heavy reasoning needed
 const MODELS: Record<string, string> = {
   xai:    'grok-4-1-fast-non-reasoning',
-  gemini: 'gemini-3-flash-preview',
+  gemini: 'gemini-3.1-flash-lite-preview',
   groq:   'openai/gpt-oss-20b',
 };
 import { ensureProvider } from '../provider.js';
