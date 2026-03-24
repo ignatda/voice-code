@@ -140,7 +140,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
           }
-          if (retries < 1) {
+          if (retries < 2) {
             retries++;
             logger.warn({ sid }, `[run] ${formatError(error)}, retrying same provider`);
             resetRotation();
