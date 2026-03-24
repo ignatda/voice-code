@@ -21,15 +21,22 @@ function MainApp() {
   const [sessionList, setSessionList] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [inputHistory, setInputHistory] = useState([]);
+  const historyIndexRef = useRef(-1);
 
   const audioContextRef = useRef(null);
   const audioStreamRef = useRef(null);
   const socketRef = useRef(null);
   const conversationEndRef = useRef(null);
+  const promptInputRef = useRef(null);
 
   const handleSessionSwitched = useCallback((data) => {
     setActiveSessionId(data.id);
     setConversationItems(data.items || []);
+    setInputHistory(data.inputHistory || []);
+    historyIndexRef.current = -1;
+    setPromptText('');
+    setTimeout(() => promptInputRef.current?.focus(), 0);
   }, []);
 
   useEffect(() => {
@@ -57,19 +64,23 @@ function MainApp() {
     socketRef.current.on('session_list', (list) => {
       setSessionList(list);
       setActiveSessionId(prev => {
+        if (list.length === 0) {
+          setConversationItems([]);
+          return null;
+        }
         if (!prev && list.length > 0) {
           socketRef.current.emit('switch_session', list[0].id);
+          return list[0].id;
+        }
+        if (prev && !list.find(s => s.id === prev) && list.length > 0) {
+          socketRef.current.emit('switch_session', list[0].id);
+          return list[0].id;
         }
         return prev;
       });
     });
     socketRef.current.on('session_switched', handleSessionSwitched);
-    socketRef.current.on('session_deleted', (id) => {
-      if (id === activeSessionId) {
-        setActiveSessionId(null);
-        setConversationItems([]);
-      }
-    });
+    socketRef.current.on('session_deleted', () => {});
 
     socketRef.current.on('transcription_started', () => {});
 
@@ -235,9 +246,10 @@ function MainApp() {
     if (!text || !socketRef.current?.connected) return;
     setConversationItems(prev => [...prev, { type: 'user', text }]);
     socketRef.current.emit('manual_prompt', text);
+    setInputHistory(prev => prev[prev.length - 1] === text ? prev : [...prev, text]);
+    historyIndexRef.current = -1;
     setPromptText('');
-    const ta = document.querySelector('.prompt-input');
-    if (ta) ta.style.height = 'auto';
+    if (promptInputRef.current) promptInputRef.current.style.height = 'auto';
   };
 
   const createNewSession = () => {
@@ -392,6 +404,7 @@ function MainApp() {
 
         <div className="prompt-bar">
           <textarea
+            ref={promptInputRef}
             className="prompt-input"
             placeholder="Type a prompt..."
             value={promptText}
@@ -405,6 +418,26 @@ function MainApp() {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 submitPrompt();
+              } else if (e.key === 'ArrowUp' && !e.shiftKey && inputHistory.length > 0) {
+                const atFirstLine = e.target.selectionStart === 0 || !promptText.includes('\n') || e.target.value.lastIndexOf('\n', e.target.selectionStart - 1) === -1;
+                if (atFirstLine) {
+                  e.preventDefault();
+                  const newIndex = historyIndexRef.current === -1 ? inputHistory.length - 1 : Math.max(0, historyIndexRef.current - 1);
+                  historyIndexRef.current = newIndex;
+                  setPromptText(inputHistory[newIndex]);
+                }
+              } else if (e.key === 'ArrowDown' && !e.shiftKey && historyIndexRef.current !== -1) {
+                const atLastLine = e.target.selectionStart >= e.target.value.length || (!promptText.includes('\n') || e.target.value.indexOf('\n', e.target.selectionStart) === -1);
+                if (atLastLine) {
+                  e.preventDefault();
+                  if (historyIndexRef.current < inputHistory.length - 1) {
+                    historyIndexRef.current += 1;
+                    setPromptText(inputHistory[historyIndexRef.current]);
+                  } else {
+                    historyIndexRef.current = -1;
+                    setPromptText('');
+                  }
+                }
               }
             }}
             disabled={!isConnected}

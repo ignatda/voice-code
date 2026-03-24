@@ -161,14 +161,14 @@ export function registerSocketHandlers(io: Server): void {
       const { id, name, items } = SessionStore.create();
       socketSession.set(sid, id);
       socket.emit('session_list', SessionStore.list());
-      socket.emit('session_switched', { id, name, items });
+      socket.emit('session_switched', { id, name, items, inputHistory: [] });
     });
 
     socket.on('switch_session', (sessionId: string) => {
       if (!SessionStore.exists(sessionId)) return;
       socketSession.set(sid, sessionId);
       const store = new SessionStore(sessionId);
-      socket.emit('session_switched', { id: sessionId, name: store.getName(), items: store.getDisplayItems() });
+      socket.emit('session_switched', { id: sessionId, name: store.getName(), items: store.getDisplayItems(), inputHistory: store.getInputHistory() });
     });
 
     socket.on('delete_session', (sessionId: string) => {
@@ -255,6 +255,8 @@ export function registerSocketHandlers(io: Server): void {
       if (!text?.trim()) return;
       logger.info({ sid }, `[socketio] Manual prompt received, len=${text.length}`);
       ensureSession(sid, socket);
+      const sessionId = getActiveSessionId(sid);
+      if (sessionId) new SessionStore(sessionId).addInputHistory(text.trim());
       statusMap.set(sid, 'executing');
       socket.emit('status', { status: 'executing' });
       processWithOrchestrator(text.trim(), sid, io);

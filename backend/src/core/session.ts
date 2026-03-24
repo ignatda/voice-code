@@ -23,6 +23,8 @@ interface SessionMeta {
   createdAt: number;
   /** UI-only items (system messages, agent labels) not captured by SDK history */
   displayItems: ConversationItem[];
+  /** User input history for up-arrow recall */
+  inputHistory?: string[];
 }
 
 // ── File paths ──────────────────────────────────────────────────────────────
@@ -113,6 +115,22 @@ export class SessionStore implements SDKSession {
   /** Get all UI display items for the frontend. */
   getDisplayItems(): ConversationItem[] {
     return this.getMeta().displayItems;
+  }
+
+  /** Append a user input to the input history. */
+  addInputHistory(text: string): void {
+    const meta = this.getMeta();
+    if (!meta.inputHistory) meta.inputHistory = [];
+    // Avoid consecutive duplicates
+    if (meta.inputHistory[meta.inputHistory.length - 1] !== text) {
+      meta.inputHistory.push(text);
+    }
+    this.saveMeta(meta);
+  }
+
+  /** Get user input history for up-arrow recall. */
+  getInputHistory(): string[] {
+    return this.getMeta().inputHistory || [];
   }
 
   // ── Static helpers ────────────────────────────────────────────────────
