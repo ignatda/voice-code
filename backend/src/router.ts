@@ -12,6 +12,18 @@ import { buildAgentGraph, killTerminalProcess, isPlannerExit } from './agents/in
 import type { AppContext } from './agents/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+function formatError(err: unknown): string {
+  if (!err || typeof err !== 'object') return String(err);
+  const e = err as any;
+  const parts: string[] = [];
+  if (e.status) parts.push(`${e.status}`);
+  if (e.error?.message) parts.push(e.error.message);
+  else if (e.message) parts.push(e.message);
+  if (e.error?.status) parts.push(`(${e.error.status})`);
+  return parts.join(' ') || String(err);
+}
+
 const getXaiApiKey = () => process.env.XAI_API_KEY;
 const getSttApiKey = () => {
   const provider = process.env.STT_PROVIDER || 'xai';
@@ -123,14 +135,14 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       } catch (error) {
         if (isRetryable(error)) {
           if (rotateProvider()) {
-            logger.warn({ sid }, `[run] Error from ${getCurrentProviderName()} (${(error as any).status || 'unknown'}), rotating to next provider`);
+            logger.warn({ sid }, `[run] ${formatError(error)}, rotating to next provider`);
             io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: String((error as any).status || 'error') });
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
           }
           if (retries < 1) {
             retries++;
-            logger.warn({ sid }, `[run] Retryable error (${(error as any).status || 'unknown'}), retrying same provider`);
+            logger.warn({ sid }, `[run] ${formatError(error)}, retrying same provider`);
             resetRotation();
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
@@ -179,9 +191,10 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       io.to(sid).emit('agents_stopped', { message: 'Interrupted by user.' });
       return;
     }
-    logger.error({ sid }, `[run] Error: ${error}`);
-    io.to(sid).emit('ide_result', { agent: 'ide', status: 'error', message: String(error), received_prompt: transcription });
-    if (sessionId) session.addDisplayItem({ type: 'system', text: `Error: ${error}` });
+    const errMsg = formatError(error);
+    logger.error({ sid }, `[run] Error: ${errMsg}`);
+    io.to(sid).emit('ide_result', { agent: 'ide', status: 'error', message: errMsg, received_prompt: transcription });
+    if (sessionId) session.addDisplayItem({ type: 'system', text: `Error: ${errMsg}` });
   }
 }
 
