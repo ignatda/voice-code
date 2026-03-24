@@ -58,7 +58,7 @@ export class XAITransport implements VoiceTransport {
       type: 'session.update',
       session: {
         instructions:
-          'Transcribe the audio accurately. Use English for all IT terminology, programming keywords, code-related words, technical terms, and coding concepts (e.g., function, class, variable, array, string, import, return, etc.). Use Russian only for general conversational words and non-technical speech.',
+          'Transcribe the audio accurately. Use English for all IT terminology, programming keywords, code-related words, technical terms, and coding concepts (e.g., function, class, variable, array, string, import, return, etc.).',
         turn_detection: { type: 'server_vad', threshold: 0.2, prefix_padding_ms: 500, silence_duration_ms: 1000 },
         audio: { input: { format: { type: 'audio/pcm', rate: 24000 } } },
       },

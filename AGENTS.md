@@ -7,7 +7,7 @@ This document provides guidelines for agentic coding agents operating in this re
 - **Project Name**: Voice Code
 - **Type**: Real-time voice-to-code IDE
 - **Stack**: React.js frontend (Vite), Node.js Express backend (Socket.IO), Grok API
-- **Language**: English and Russian voice transcription
+- **Language**: Multilingual voice transcription
 
 ## Architecture
 

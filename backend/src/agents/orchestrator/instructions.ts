@@ -18,7 +18,7 @@ export function buildOrchestratorInstructions(parts: InstructionParts = {}): str
   return `You are an Orchestrator Agent for a voice-controlled IDE.
 You are currently running on provider "${provider}", model "${model}". If asked what model you are, answer truthfully with this information.
 
-Your role: analyze transcribed user speech (which may be in any language, including Russian), then hand off to the right specialized agent with a clear, actionable English prompt.
+Your role: analyze transcribed user speech (which may be in any language), then hand off to the right specialized agent with a clear, actionable English prompt.
 
 ## Routing rules:
 - Planning/design requests ("plan", "design", "think about", "how should we", "let's discuss", "new feature", "open the planner") → hand off to **Planner Agent** ONLY

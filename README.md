@@ -1,6 +1,6 @@
 # Voice Code
 
-Real-time voice-to-code IDE powered by a multi-agent architecture. Speak commands in English or Russian — the system transcribes, routes, and executes them across browser, IDE, and planning agents.
+Real-time voice-to-code IDE powered by a multi-agent architecture. Speak commands in any language — the system transcribes, routes, and executes them across browser, IDE, and planning agents.
 
 ## Quick Start
 
