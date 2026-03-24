@@ -24,6 +24,9 @@ function formatError(err: unknown): string {
   return parts.join(' ') || String(err);
 }
 
+/** Log context with sid + current provider */
+const ctx = (sid: string) => ({ sid, provider: getCurrentProviderName() });
+
 const getXaiApiKey = () => process.env.XAI_API_KEY;
 const getSttApiKey = () => {
   const provider = process.env.STT_PROVIDER || 'xai';
@@ -45,8 +48,8 @@ function killAll(sid: string): void {
   killTerminalProcess();
   import('child_process').then(({ execFile }) => {
     execFile(STOP_SCRIPT, (err) => {
-      if (err) logger.error({ sid }, `[stop] stop.sh error: ${err.message}`);
-      else logger.info({ sid }, '[stop] stop.sh executed');
+      if (err) logger.error(ctx(sid), `[stop] stop.sh error: ${err.message}`);
+      else logger.info(ctx(sid), '[stop] stop.sh executed');
     });
   });
 }
@@ -69,7 +72,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
   const sessionId = getActiveSessionId(sid);
 
   if (isStopCommand(transcription)) {
-    logger.info({ sid }, '[interrupt] Stop command detected');
+    logger.info(ctx(sid), '[interrupt] Stop command detected');
     killAll(sid);
     io.to(sid).emit('agents_stopped', { message: 'All agents stopped.' });
     if (sessionId) {
@@ -82,7 +85,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
   const isReadOnly = readOnlyMap.get(sid) ?? false;
   const pendingPlan = sessionId ? pendingPlans.get(sessionId) : undefined;
   const inPlannerMode = sessionId ? (plannerMode.get(sessionId) ?? false) : false;
-  logger.info({ sid }, `[orchestrator] Processing, text_len=${transcription.length}, readOnly=${isReadOnly}, plannerMode=${inPlannerMode}`);
+  logger.info(ctx(sid), `[orchestrator] Processing, text_len=${transcription.length}, readOnly=${isReadOnly}, plannerMode=${inPlannerMode}`);
 
   const signal = createSignal(sid);
   const agentSessionId = sessionId || sid;
@@ -119,7 +122,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       plannerMode: inPlannerMode,
       pendingPlan,
     });
-    logger.info({ sid }, `[run] Starting with provider=${getCurrentProviderName()}, model=${getCurrentModel()}`);
+    logger.info(ctx(sid), `[run] Starting with provider=${getCurrentProviderName()}, model=${getCurrentModel()}`);
 
     let result;
     let retries = 0;
@@ -135,14 +138,14 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       } catch (error) {
         if (isRetryable(error)) {
           if (rotateProvider()) {
-            logger.warn({ sid }, `[run] ${formatError(error)}, rotating to next provider`);
+            logger.warn(ctx(sid), `[run] ${formatError(error)}, rotating to next provider`);
             io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: String((error as any).status || 'error') });
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
           }
           if (retries < 2) {
             retries++;
-            logger.warn({ sid }, `[run] ${formatError(error)}, retrying same provider`);
+            logger.warn(ctx(sid), `[run] ${formatError(error)}, retrying same provider`);
             resetRotation();
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
@@ -155,7 +158,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
     const output = result.finalOutput || '';
     const lastAgentName = result.lastAgent?.name || 'Orchestrator';
 
-    logger.info({ sid }, `[run] Completed. provider=${getCurrentProviderName()}, lastAgent=${lastAgentName}, output_len=${output.length}, output_preview=${JSON.stringify(output.slice(0, 200))}`);
+    logger.info(ctx(sid), `[run] Completed. provider=${getCurrentProviderName()}, lastAgent=${lastAgentName}, output_len=${output.length}, output_preview=${JSON.stringify(output.slice(0, 200))}`);
 
     if (isPlannerExit(output) && sessionId) {
       plannerMode.delete(sessionId);
@@ -187,12 +190,12 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
     }
   } catch (error) {
     if (signal.aborted) {
-      logger.info({ sid }, '[run] Interrupted by user');
+      logger.info(ctx(sid), '[run] Interrupted by user');
       io.to(sid).emit('agents_stopped', { message: 'Interrupted by user.' });
       return;
     }
     const errMsg = formatError(error);
-    logger.error({ sid }, `[run] Error: ${errMsg}`);
+    logger.error(ctx(sid), `[run] Error: ${errMsg}`);
     io.to(sid).emit('ide_result', { agent: 'ide', status: 'error', message: errMsg, received_prompt: transcription });
     if (sessionId) session.addDisplayItem({ type: 'system', text: `Error: ${errMsg}` });
   }
@@ -201,11 +204,11 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
 export function registerSocketHandlers(io: Server): void {
   io.on('connection', (socket) => {
     const sid = socket.id;
-    logger.info({ sid }, '[socketio] Client connected');
+    logger.info(ctx(sid), '[socketio] Client connected');
 
     socket.on('set_read_only', (value: boolean) => {
       readOnlyMap.set(sid, value);
-      logger.info({ sid }, `[socketio] Read-only mode set to ${value}`);
+      logger.info(ctx(sid), `[socketio] Read-only mode set to ${value}`);
     });
 
     socket.on('get_sessions', () => {
@@ -262,7 +265,7 @@ export function registerSocketHandlers(io: Server): void {
         },
         (status: string) => { io.to(sid).emit('status', { status }); },
         (error: string) => {
-          logger.info({ sid }, `[voice] Error: ${error}`);
+          logger.info(ctx(sid), `[voice] Error: ${error}`);
           io.to(sid).emit('error', { message: error });
         },
       );
@@ -272,9 +275,9 @@ export function registerSocketHandlers(io: Server): void {
         voiceClients.set(sid, voiceClient);
         socket.emit('transcription_started', { message: 'Connected to STT provider and ready for audio.' });
         socket.emit('status', { status: 'idle' });
-        logger.info({ sid }, '[socketio] Transcription stream started');
+        logger.info(ctx(sid), '[socketio] Transcription stream started');
       } catch (error) {
-        logger.info({ sid }, `[voice] Failed to connect: ${error}`);
+        logger.info(ctx(sid), `[voice] Failed to connect: ${error}`);
         socket.emit('error', { message: `Failed to connect to STT provider: ${error}` });
         voiceClients.delete(sid);
       }
@@ -291,12 +294,12 @@ export function registerSocketHandlers(io: Server): void {
     });
 
     socket.on('commit_audio', () => {
-      logger.info({ sid }, '[socketio] commit_audio received');
+      logger.info(ctx(sid), '[socketio] commit_audio received');
       voiceClients.get(sid)?.commitAudio();
     });
 
     socket.on('stop_transcription_stream', async () => {
-      logger.info({ sid }, '[socketio] stop_transcription_stream');
+      logger.info(ctx(sid), '[socketio] stop_transcription_stream');
       const client = voiceClients.get(sid);
       if (client) {
         client.close();
@@ -310,7 +313,7 @@ export function registerSocketHandlers(io: Server): void {
 
     socket.on('manual_prompt', (text: string) => {
       if (!text?.trim()) return;
-      logger.info({ sid }, `[socketio] Manual prompt received, len=${text.length}`);
+      logger.info(ctx(sid), `[socketio] Manual prompt received, len=${text.length}`);
       ensureSession(sid, socket);
       const sessionId = getActiveSessionId(sid);
       if (sessionId) new SessionStore(sessionId).addInputHistory(text.trim());
@@ -320,13 +323,13 @@ export function registerSocketHandlers(io: Server): void {
     });
 
     socket.on('stop_all', () => {
-      logger.info({ sid }, '[socketio] stop_all received');
+      logger.info(ctx(sid), '[socketio] stop_all received');
       killAll(sid);
       socket.emit('agents_stopped', { message: 'All agents stopped.' });
     });
 
     socket.on('disconnect', () => {
-      logger.info({ sid }, '[socketio] Client disconnected');
+      logger.info(ctx(sid), '[socketio] Client disconnected');
       abortAll(sid);
       cleanup(sid);
       socketSession.delete(sid);
