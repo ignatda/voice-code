@@ -13,12 +13,15 @@ import logger from '../../core/logger.js';
 import { ensureProvider } from '../provider.js';
 import { readOnlyGuardrail } from '../guardrails.js';
 
-const PLAYWRIGHT_MCP_CONFIG = {
-  command: 'npx',
-  args: ['-y', '@playwright/mcp', '--image-responses', 'omit'],
-  env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0' },
-  timeout: 60000,
-};
+function getMcpConfig(headless = false) {
+  return {
+    command: 'npx',
+    args: ['-y', '@playwright/mcp', '--image-responses', 'omit',
+      ...(headless ? ['--headless'] : [])],
+    env: { ...process.env, DISPLAY: process.env.DISPLAY || ':0' },
+    timeout: 60000,
+  };
+}
 
 const INSTRUCTIONS = `You are a browser automation agent using Playwright.
 
@@ -46,9 +49,18 @@ Always provide feedback on what actions were taken.`;
 let mcpServer: MCPServerStdio | null = null;
 let mcpConnected = false;
 
+export async function resetBrowserMcp(): Promise<void> {
+  if (mcpServer) {
+    try { await mcpServer.close(); } catch {}
+    mcpServer = null;
+    mcpConnected = false;
+    logger.info('[browser_agent] MCP server reset (headless mode changed)');
+  }
+}
+
 async function ensureMcp(): Promise<MCPServerStdio> {
   if (!mcpServer) {
-    mcpServer = new MCPServerStdio({ name: 'Playwright Browser', ...PLAYWRIGHT_MCP_CONFIG });
+    mcpServer = new MCPServerStdio({ name: 'Playwright Browser', ...getMcpConfig() });
   }
   if (!mcpConnected) {
     await mcpServer.connect();
