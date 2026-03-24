@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import MarkdownMessage from './MarkdownMessage';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
@@ -10,6 +10,7 @@ import './App.css';
 const SOCKET_SERVER_URL = import.meta.env.VITE_SOCKET_SERVER_URL || 'http://localhost:5000';
 
 function MainApp() {
+  const navigate = useNavigate();
   const { setupRequired } = useSettings();
   const [micEnabled, setMicEnabled] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
@@ -63,11 +64,11 @@ function MainApp() {
 
     socketRef.current.on('session_list', (list) => {
       setSessionList(list);
+      if (list.length === 0) {
+        socketRef.current.emit('create_session');
+        return;
+      }
       setActiveSessionId(prev => {
-        if (list.length === 0) {
-          setConversationItems([]);
-          return null;
-        }
         if (!prev && list.length > 0) {
           socketRef.current.emit('switch_session', list[0].id);
           return list[0].id;
@@ -80,9 +81,6 @@ function MainApp() {
       });
     });
     socketRef.current.on('session_switched', handleSessionSwitched);
-    socketRef.current.on('session_deleted', () => {});
-
-    socketRef.current.on('transcription_started', () => {});
 
     socketRef.current.on('transcription_update', (data) => {
       if (data.type === 'transcript' && data.text) {
@@ -112,8 +110,6 @@ function MainApp() {
       }
     });
 
-    socketRef.current.on('ready_for_audio', () => {});
-
     socketRef.current.on('browser_result', (data) => {
       const text = data.message || data.error || 'No response';
       setConversationItems(prev => [...prev, { type: 'agent', agent: 'browser', text }]);
@@ -123,8 +119,6 @@ function MainApp() {
       const text = data.message || 'No response';
       setConversationItems(prev => [...prev, { type: 'agent', agent: data.agent || 'jetbrains', text }]);
     });
-
-    socketRef.current.on('transcription_stopped', () => {});
 
     socketRef.current.on('agents_stopped', () => {
       setConversationItems(prev => [...prev, { type: 'system', text: '⛔ All agents stopped.' }]);
@@ -151,13 +145,9 @@ function MainApp() {
     }
   }, [conversationItems]);
 
-  const toggleMic = async () => {
-    if (micEnabled) {
-      disableMic();
-    } else {
-      enableMic();
-    }
-  };
+  const toggleMic = () => micEnabledRef.current ? disableMic() : enableMic();
+  const micEnabledRef = useRef(false);
+  useEffect(() => { micEnabledRef.current = micEnabled; }, [micEnabled]);
 
   const enableMic = async () => {
     if (!socketRef.current || !isConnected) {
@@ -255,6 +245,7 @@ function MainApp() {
   const createNewSession = () => {
     if (socketRef.current?.connected) {
       socketRef.current.emit('create_session');
+      setSidebarOpen(false);
     }
   };
 
@@ -270,6 +261,48 @@ function MainApp() {
       socketRef.current.emit('delete_session', id);
     }
   };
+
+  // ── Keyboard shortcuts ──────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      // Sidebar mode: arrows, Delete, N, Esc — always intercept regardless of focus
+      if (sidebarOpen && !e.ctrlKey && !e.altKey) {
+        if (e.key === 'Escape') { setSidebarOpen(false); return; }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const idx = sessionList.findIndex(s => s.id === activeSessionId);
+          const next = e.key === 'ArrowUp' ? idx - 1 : idx + 1;
+          if (next >= 0 && next < sessionList.length) switchSession(sessionList[next].id);
+          return;
+        }
+        if (e.key === 'Enter') { e.preventDefault(); setSidebarOpen(false); setTimeout(() => promptInputRef.current?.focus(), 0); return; }
+        if (e.key === 'Delete') {
+          e.preventDefault();
+          if (activeSessionId && socketRef.current?.connected) socketRef.current.emit('delete_session', activeSessionId);
+          return;
+        }
+        if (e.key === 'n' || e.key === 'N') { e.preventDefault(); createNewSession(); return; }
+      }
+
+      // Ctrl+Alt shortcuts
+      if (e.ctrlKey && e.altKey && !e.shiftKey) {
+        if (e.key === 's' || e.key === 'S') {
+          e.preventDefault();
+          setSidebarOpen(o => !o);
+          return;
+        }
+        if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMic(); return; }
+        if (e.key === 'r' || e.key === 'R') { e.preventDefault(); toggleReadOnly(); return; }
+        if (e.key === ',') { e.preventDefault(); navigate('/settings'); return; }
+        if (e.key === 'x' || e.key === 'X') { e.preventDefault(); stopAll(); return; }
+      }
+
+      if (e.key === '/' && !e.ctrlKey && !e.altKey && !['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) { e.preventDefault(); promptInputRef.current?.focus(); return; }
+    };
+
+    window.addEventListener('keydown', handler, true);
+    return () => window.removeEventListener('keydown', handler, true);
+  }, [activeSessionId, sessionList, sidebarOpen]);
 
   const getStatusText = () => {
     switch (status) {
@@ -287,7 +320,7 @@ function MainApp() {
       <aside className={`sidebar${sidebarOpen ? ' open' : ''}`}>
         <div className="sidebar-header">
           <span className="sidebar-title">Sessions</span>
-          <button className="new-session-btn" onClick={createNewSession} title="New session">+</button>
+          <button className="new-session-btn" onClick={createNewSession} title="New session (N when sidebar open)">+</button>
         </div>
         <div className="session-list">
           {sessionList.map(s => (
@@ -297,12 +330,15 @@ function MainApp() {
               onClick={() => switchSession(s.id)}
             >
               <span className="session-name">{s.name}</span>
-              <button className="delete-session-btn" onClick={(e) => deleteSession(e, s.id)} title="Delete">×</button>
+              <button className="delete-session-btn" onClick={(e) => deleteSession(e, s.id)} title="Delete (Del when sidebar open)">×</button>
             </div>
           ))}
           {sessionList.length === 0 && (
             <p className="no-sessions">No sessions yet</p>
           )}
+        </div>
+        <div className="sidebar-hints">
+          ↑↓ navigate · Enter select · N new · Del remove · Esc close
         </div>
       </aside>
 
@@ -325,7 +361,7 @@ function MainApp() {
               className={`mic-toggle ${micEnabled ? 'enabled' : ''}`}
               onClick={toggleMic}
               disabled={!isConnected}
-              title={micEnabled ? 'Disable microphone' : 'Enable microphone'}
+              title={micEnabled ? 'Disable microphone (Ctrl+Alt+M)' : 'Enable microphone (Ctrl+Alt+M)'}
             >
               {micEnabled ? (
                 <svg viewBox="0 0 24 24" width="20" height="20">
@@ -345,7 +381,7 @@ function MainApp() {
               className="stop-button"
               onClick={stopAll}
               disabled={!isConnected || status === 'idle'}
-              title="Stop all agents"
+              title="Stop all agents (Ctrl+Alt+X)"
             >
               <svg viewBox="0 0 24 24" width="20" height="20">
                 <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor"/>
@@ -355,7 +391,7 @@ function MainApp() {
             <button
               className={`readonly-toggle${readOnly ? ' active' : ''}`}
               onClick={toggleReadOnly}
-              title="Toggle Read-Only Mode"
+              title="Toggle Read-Only Mode (Ctrl+Alt+R)"
             >
               {readOnly ? (
                 <svg viewBox="0 0 24 24" width="20" height="20">
@@ -440,7 +476,7 @@ function MainApp() {
                 }
               }
             }}
-            disabled={!isConnected}
+            disabled={!isConnected || sidebarOpen}
           />
           <button
             className="prompt-send"

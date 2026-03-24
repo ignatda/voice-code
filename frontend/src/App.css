@@ -49,8 +49,10 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 14px;
+  padding: 8px 14px;
+  min-height: 57px;
   border-bottom: 1px solid #323232;
+  background-color: #3c3f41;
 }
 
 .sidebar-title {
@@ -173,7 +175,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
+  padding: 8px 24px;
   background-color: #3c3f41;
   border-bottom: 1px solid #323232;
 }
@@ -811,4 +813,14 @@ body {
 .settings-hint {
   color: #666;
   font-size: 11px;
+}
+
+/* Sidebar hotkey hints */
+.sidebar-hints {
+  padding: 8px 14px;
+  border-top: 1px solid #323232;
+  font-size: 11px;
+  color: #666;
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.6;
 }

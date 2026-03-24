@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNavigate } from 'react-router-dom';
 import HelpTooltip from './HelpTooltip';
@@ -53,6 +53,14 @@ export default function Settings() {
   };
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
+
+  const goBack = () => { if (hasKeys) navigate('/'); };
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') goBack(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return (
     <div className="settings-page">
