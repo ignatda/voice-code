@@ -137,15 +137,16 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
         break;
       } catch (error) {
         if (isRetryable(error)) {
+          const failedProvider = getCurrentProviderName();
           if (rotateProvider()) {
-            logger.warn(ctx(sid), `[run] ${formatError(error)}, rotating to next provider`);
+            logger.warn({ sid, provider: failedProvider }, `[run] ${formatError(error)}, rotating to ${getCurrentProviderName()}`);
             io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: String((error as any).status || 'error') });
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
           }
           if (retries < 2) {
             retries++;
-            logger.warn(ctx(sid), `[run] ${formatError(error)}, retrying same provider`);
+            logger.warn({ sid, provider: failedProvider }, `[run] ${formatError(error)}, retrying same provider`);
             resetRotation();
             graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
             continue;
