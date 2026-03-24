@@ -1,7 +1,5 @@
-import { Agent, handoff, tool } from '@openai/agents';
-import { z } from 'zod';
+import { Agent, handoff } from '@openai/agents';
 import type { AppContext } from '../context.js';
-import { getXAIConfig } from '../../core';
 import { getAgentModel } from '../../core/providers.js';
 
 // Orchestrator = fast routing, no heavy reasoning needed
@@ -11,34 +9,7 @@ const MODELS: Record<string, string> = {
   groq:   'openai/gpt-oss-20b',
 };
 import { ensureProvider } from '../provider.js';
-import logger from '../../core/logger.js';
 import { buildOrchestratorInstructions, type InstructionParts } from './instructions.js';
-
-// ── Translation tool ────────────────────────────────────────────────────────
-const translateTool = tool({
-  name: 'translate_to_english',
-  description: 'Translate text from any language to English. If already English, return as-is.',
-  parameters: z.object({ text: z.string() }),
-  execute: async ({ text }) => {
-    const config = getXAIConfig();
-    const OpenAI = (await import('openai')).default;
-    const client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL });
-    try {
-      const r = await client.chat.completions.create({
-        model: config.model,
-        messages: [
-          { role: 'system', content: 'You are a translator. Translate any language to English. Just output the translated text, nothing else.' },
-          { role: 'user', content: `Translate to English. If already English, return as-is:\n\n${text}` },
-        ],
-        temperature: 0.0,
-      });
-      return r.choices[0]?.message?.content?.trim() || text;
-    } catch (e) {
-      logger.error(`[orchestrator] Translation error: ${e}`);
-      return text;
-    }
-  },
-});
 
 // ── Orchestrator factory ────────────────────────────────────────────────────
 export interface OrchestratorOptions {
@@ -91,7 +62,7 @@ Do NOT hand off to Browser Agent while in planner mode.`
   return new Agent<AppContext>({
     name: 'Orchestrator',
     instructions,
-    // tools: [translateTool],
+    // tools: [],
     handoffs: [
       handoff(opts.browserAgent, { toolDescriptionOverride: 'Hand off to Browser Agent for web browsing, navigation, searching, clicking, scrolling, and page interaction.' }),
       handoff(opts.ideAgent, { toolDescriptionOverride: 'Hand off to IDE Agent for coding, file editing, IDE navigation, running commands, and project management.' }),
