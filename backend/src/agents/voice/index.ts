@@ -2,12 +2,14 @@ export type { VoiceTransport, TranscriptionCallback, StatusCallback, ErrorCallba
 import type { VoiceTransport } from './types.js';
 import { XAITransport } from './transports/xai.js';
 import { GroqTransport } from './transports/groq.js';
+import { GeminiTransport } from './transports/gemini.js';
 
 export function createVoiceClient(provider: string, apiKey: string, sid: string): VoiceTransport {
   switch (provider) {
-    case 'groq': return new GroqTransport(apiKey, sid);
+    case 'groq':   return new GroqTransport(apiKey, sid);
+    case 'gemini': return new GeminiTransport(apiKey, sid);
     case 'xai':
-    default:     return new XAITransport(apiKey, sid);
+    default:       return new XAITransport(apiKey, sid);
   }
 }
 

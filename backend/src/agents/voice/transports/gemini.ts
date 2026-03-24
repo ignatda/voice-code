@@ -1,11 +1,11 @@
 import type { VoiceTransport, TranscriptionCallback, StatusCallback, ErrorCallback } from '../types.js';
 import logger from '../../../core/logger.js';
 
-const GROQ_TRANSCRIPTION_URL = 'https://api.groq.com/openai/v1/audio/transcriptions';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 const SILENCE_DURATION_MS = 1000;
 const ENERGY_THRESHOLD = 500;
 
-export class GroqTransport implements VoiceTransport {
+export class GeminiTransport implements VoiceTransport {
   private apiKey: string;
   private sid: string;
   private buffer: Buffer[] = [];
@@ -28,7 +28,7 @@ export class GroqTransport implements VoiceTransport {
 
   async connect(): Promise<void> {
     this.connected = true;
-    logger.info({ sid: this.sid }, '[groq-whisper] Ready for audio');
+    logger.info({ sid: this.sid }, '[gemini-stt] Ready for audio');
   }
 
   sendAudio(base64: string): void {
@@ -42,19 +42,13 @@ export class GroqTransport implements VoiceTransport {
     }
   }
 
-  commitAudio(): void {
-    this.flushBuffer();
-  }
-
+  commitAudio(): void { this.flushBuffer(); }
   close(): void {
     if (this.silenceTimer) clearTimeout(this.silenceTimer);
     this.buffer = [];
     this.connected = false;
   }
-
-  isConnected(): boolean {
-    return this.connected;
-  }
+  isConnected(): boolean { return this.connected; }
 
   private resetSilenceTimer(): void {
     if (this.silenceTimer) clearTimeout(this.silenceTimer);
@@ -72,12 +66,12 @@ export class GroqTransport implements VoiceTransport {
     try {
       const transcript = await this.transcribe(pcm);
       if (transcript?.trim()) {
-        logger.info({ sid: this.sid }, `[groq-whisper] Transcript: '${transcript}'`);
+        logger.info({ sid: this.sid }, `[gemini-stt] Transcript: '${transcript}'`);
         this.onTranscription?.(transcript);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      logger.error({ sid: this.sid }, `[groq-whisper] Transcription error: ${msg}`);
+      logger.error({ sid: this.sid }, `[gemini-stt] Transcription error: ${msg}`);
       this.onError?.(msg);
     }
 
@@ -86,41 +80,31 @@ export class GroqTransport implements VoiceTransport {
 
   private async transcribe(pcm16: Buffer): Promise<string> {
     const wav = wrapPcm16AsWav(pcm16, 24000);
-    const boundary = '----VoiceCodeBoundary' + Date.now();
-    const filename = 'audio.wav';
+    const base64Audio = wav.toString('base64');
 
-    const header = Buffer.from(
-      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: audio/wav\r\n\r\n`
-    );
-    const modelPart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-large-v3`
-    );
-    const promptPart = Buffer.from(
-      `\r\n--${boundary}\r\nContent-Disposition: form-data; name="prompt"\r\n\r\nTranscribe the audio accurately. Use English for all IT terminology, programming keywords, code-related words, technical terms, and coding concepts (e.g., function, class, variable, array, string, import, return, etc.).`
-    );
-    const footer = Buffer.from(`\r\n--${boundary}--\r\n`);
-    const body = Buffer.concat([header, wav, modelPart, promptPart, footer]);
-
-    const res = await fetch(GROQ_TRANSCRIPTION_URL, {
+    const res = await fetch(`${GEMINI_URL}?key=${this.apiKey}`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: 'Transcribe the audio accurately. Use English for all IT terminology, programming keywords, code-related words, technical terms, and coding concepts (e.g., function, class, variable, array, string, import, return, etc.). Output ONLY the transcript text, nothing else.' },
+            { inlineData: { mimeType: 'audio/wav', data: base64Audio } },
+          ],
+        }],
+      }),
     });
 
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Groq Whisper ${res.status}: ${text}`);
+      throw new Error(`Gemini STT ${res.status}: ${text}`);
     }
 
-    const data = await res.json() as { text?: string };
-    return data.text || '';
+    const data = await res.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   }
 }
 
-/** Simple energy-based VAD: check if PCM16 samples exceed threshold */
 function hasVoiceActivity(pcm16Buffer: Buffer): boolean {
   const samples = new Int16Array(pcm16Buffer.buffer, pcm16Buffer.byteOffset, pcm16Buffer.byteLength / 2);
   let energy = 0;
@@ -128,25 +112,21 @@ function hasVoiceActivity(pcm16Buffer: Buffer): boolean {
   return (energy / samples.length) > ENERGY_THRESHOLD;
 }
 
-/** Wrap raw PCM16 mono data in a minimal WAV header */
 function wrapPcm16AsWav(pcm16: Buffer, sampleRate: number): Buffer {
   const header = Buffer.alloc(44);
   const dataSize = pcm16.byteLength;
-  const fileSize = 36 + dataSize;
-
   header.write('RIFF', 0);
-  header.writeUInt32LE(fileSize, 4);
+  header.writeUInt32LE(36 + dataSize, 4);
   header.write('WAVE', 8);
   header.write('fmt ', 12);
-  header.writeUInt32LE(16, 16);       // fmt chunk size
-  header.writeUInt16LE(1, 20);        // PCM format
-  header.writeUInt16LE(1, 22);        // mono
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 22);
   header.writeUInt32LE(sampleRate, 24);
-  header.writeUInt32LE(sampleRate * 2, 28); // byte rate
-  header.writeUInt16LE(2, 32);        // block align
-  header.writeUInt16LE(16, 34);       // bits per sample
+  header.writeUInt32LE(sampleRate * 2, 28);
+  header.writeUInt16LE(2, 32);
+  header.writeUInt16LE(16, 34);
   header.write('data', 36);
   header.writeUInt32LE(dataSize, 40);
-
   return Buffer.concat([header, pcm16]);
 }

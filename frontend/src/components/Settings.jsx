@@ -94,8 +94,9 @@ export default function Settings() {
           <select value={form.STT_PROVIDER} onChange={set('STT_PROVIDER')}>
             <option value="xai">xAI Realtime (WebSocket, real-time)</option>
             <option value="groq">Groq Whisper (batch, free)</option>
+            <option value="gemini">Gemini (batch, free)</option>
           </select>
-          <span className="settings-hint">xAI = real-time streaming, Groq = slight delay but free tier</span>
+          <span className="settings-hint">xAI = real-time streaming, Groq/Gemini = slight delay but free tier</span>
         </label>
 
         <label>

@@ -31,6 +31,7 @@ const getXaiApiKey = () => process.env.XAI_API_KEY;
 const getSttApiKey = () => {
   const provider = process.env.STT_PROVIDER || 'xai';
   if (provider === 'groq') return process.env.GROQ_API_KEY;
+  if (provider === 'gemini') return process.env.GEMINI_API_KEY;
   return process.env.XAI_API_KEY;
 };
 
