@@ -27,6 +27,8 @@ interface SessionMeta {
   inputHistory?: string[];
   /** Last error for debugging and recovery */
   lastError?: string;
+  /** Running count of user messages in this session */
+  messageCount: number;
 }
 
 // ── File paths ──────────────────────────────────────────────────────────────
@@ -85,7 +87,7 @@ export class SessionStore implements SDKSession {
     if (fs.existsSync(p)) {
       try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { /* fall through */ }
     }
-    return { name: 'New session', createdAt: Date.now(), displayItems: [] };
+    return { name: 'New session', createdAt: Date.now(), displayItems: [], messageCount: 0 };
   }
 
   private saveMeta(meta: SessionMeta): void {

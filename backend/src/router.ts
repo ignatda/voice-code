@@ -143,7 +143,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       plannerMode: inPlannerMode,
       pendingPlan,
     });
-    logger.info(ctx(sid), `[run] Starting with provider=${getCurrentProviderName()}, model=${getCurrentModel()}`);
+    logger.info(ctx(sid), `[run] Starting with model=${getCurrentModel()}`);
 
     let result;
     let retries = 0;
@@ -203,7 +203,7 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
       }
     }
 
-    logger.info(ctx(sid), `[run] Completed. provider=${getCurrentProviderName()}, lastAgent=${lastAgentName}, output_len=${output.length}, output_preview=${JSON.stringify(output.slice(0, 200))}`);
+    logger.info(ctx(sid), `[run] Completed. lastAgent=${lastAgentName}, output_len=${output.length}, output_preview=${JSON.stringify(output.slice(0, 200))}`);
 
     if (isPlannerExit(output) && sessionId) {
       plannerMode.delete(sessionId);
@@ -352,7 +352,7 @@ export function registerSocketHandlers(io: Server): void {
           );
           ttsClients.set(sid, ttsClient);
           ttsEnabled.set(sid, false);
-          logger.info(ctx(sid), `[tts] Client created (provider=${ttsProvider})`);
+          logger.info(ctx(sid), `[tts] Client created`);
         }
 
         socket.emit('transcription_started', { message: 'Connected to STT provider and ready for audio.' });
