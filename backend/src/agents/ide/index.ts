@@ -1,7 +1,15 @@
 import { Agent } from '@openai/agents';
 import { MCPServerStdio } from '@openai/agents';
 import type { AppContext } from '../context.js';
-import { getXAIConfig, getAgentsMd } from '../../core/config.js';
+import { getAgentsMd } from '../../core/config.js';
+import { getAgentModel } from '../../core/providers.js';
+
+// IDE = coding tasks, needs strong tool calling + reasoning
+const MODELS: Record<string, string> = {
+  xai:    'grok-4.20-0309-non-reasoning',
+  gemini: 'gemini-3.1-pro-preview',
+  groq:   'openai/gpt-oss-120b',
+};
 import logger from '../../core/logger.js';
 import { ensureProvider } from '../provider.js';
 import { readOnlyGuardrail } from '../guardrails.js';
@@ -110,7 +118,7 @@ export async function createIDEAgent(readOnly = false): Promise<Agent<AppContext
     instructions: getInstructions(ideType),
     mcpServers: mcp ? [mcp] : [],
     tools: cliTool ? [cliTool] : [],
-    model: getXAIConfig().model,
+    model: getAgentModel(MODELS),
     inputGuardrails: readOnly ? [readOnlyGuardrail] : [],
   });
 }

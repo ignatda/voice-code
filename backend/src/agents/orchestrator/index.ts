@@ -2,6 +2,14 @@ import { Agent, handoff, tool } from '@openai/agents';
 import { z } from 'zod';
 import type { AppContext } from '../context.js';
 import { getXAIConfig } from '../../core';
+import { getAgentModel } from '../../core/providers.js';
+
+// Orchestrator = fast routing, no heavy reasoning needed
+const MODELS: Record<string, string> = {
+  xai:    'grok-4-1-fast-non-reasoning',
+  gemini: 'gemini-3-flash-preview',
+  groq:   'openai/gpt-oss-20b',
+};
 import { ensureProvider } from '../provider.js';
 import logger from '../../core/logger.js';
 import { buildOrchestratorInstructions, type InstructionParts } from './instructions.js';
@@ -70,10 +78,13 @@ Do NOT hand off to Browser Agent while in planner mode.`
     extraParts = mod.default ?? {};
   } catch { /* extensions not available — no-op */ }
 
+  const agentModel = getAgentModel(MODELS);
+
   const instructions = buildOrchestratorInstructions({
     readOnlyClause,
     plannerModeClause,
     pendingPlanClause,
+    agentModel,
     ...extraParts,
   });
 
@@ -87,7 +98,7 @@ Do NOT hand off to Browser Agent while in planner mode.`
       handoff(opts.plannerAgent, { toolDescriptionOverride: 'Hand off to Planner Agent for designing implementation plans, architecture discussions, and feature planning.' }),
       ...(opts.extraHandoffs ?? []),
     ],
-    model: getXAIConfig().model,
+    model: agentModel,
   });
 }
 

@@ -1,6 +1,14 @@
 import { Agent } from '@openai/agents';
 import type { AppContext } from '../context.js';
-import { getXAIConfig, getAgentsMd } from '../../core/config.js';
+import { getAgentsMd } from '../../core/config.js';
+import { getAgentModel } from '../../core/providers.js';
+
+// Planner = deep reasoning, can be slow but must be sharp
+const MODELS: Record<string, string> = {
+  xai:    'grok-4.20-0309-reasoning',
+  gemini: 'gemini-3.1-pro-preview',
+  groq:   'openai/gpt-oss-120b',
+};
 import { ensureProvider } from '../provider.js';
 
 export function createPlannerAgent(): Agent<AppContext> {
@@ -23,6 +31,6 @@ Rules:
 
 ${getAgentsMd()}
 `,
-    model: getXAIConfig().model,
+    model: getAgentModel(MODELS),
   });
 }

@@ -4,15 +4,21 @@
   padding: 0;
 }
 
+button:focus:not(:focus-visible) {
+  outline: none;
+  box-shadow: none;
+  border-color: inherit;
+}
+
 html, body, #root {
   height: 100%;
   width: 100%;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-  background-color: #1a1a1a;
-  color: #ffffff;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+  background-color: #242628;
+  color: #a9b7c6;
 }
 
 .App {
@@ -27,8 +33,8 @@ body {
   width: 0;
   min-width: 0;
   overflow: hidden;
-  background-color: #1e1e1e;
-  border-right: 1px solid #333;
+  background-color: #3c3f41;
+  border-right: 1px solid #323232;
   display: flex;
   flex-direction: column;
   transition: width 0.2s ease, min-width 0.2s ease;
@@ -44,14 +50,14 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 12px 14px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #323232;
 }
 
 .sidebar-title {
   font-size: 13px;
   font-weight: 600;
   color: #aaa;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 1px;
 }
 
@@ -71,8 +77,8 @@ body {
 }
 
 .new-session-btn:hover {
-  border-color: #4caf50;
-  color: #4caf50;
+  border-color: #6a8759;
+  color: #6a8759;
 }
 
 .session-list {
@@ -97,7 +103,7 @@ body {
 
 .session-item.active {
   background-color: #2a2a2a;
-  border-left-color: #4caf50;
+  border-left-color: #6a8759;
 }
 
 .session-name {
@@ -168,8 +174,8 @@ body {
   justify-content: space-between;
   align-items: center;
   padding: 16px 24px;
-  background-color: #252525;
-  border-bottom: 1px solid #333;
+  background-color: #3c3f41;
+  border-bottom: 1px solid #323232;
 }
 
 .status-indicator {
@@ -186,7 +192,7 @@ body {
 }
 
 .status-dot.listening {
-  background-color: #4caf50;
+  background-color: #6a8759;
   animation: pulse 1.5s ease-in-out infinite;
 }
 
@@ -207,7 +213,7 @@ body {
 .status-label {
   font-size: 14px;
   color: #aaa;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 1px;
 }
 
@@ -248,8 +254,8 @@ body {
 }
 
 .mic-toggle.enabled {
-  border-color: #4caf50;
-  color: #4caf50;
+  border-color: #6a8759;
+  color: #6a8759;
   background-color: rgba(76, 175, 80, 0.1);
 }
 
@@ -296,9 +302,9 @@ body {
   flex: 1;
   padding: 16px;
   overflow-y: auto;
-  background-color: #0d0d0d;
+  background-color: #242628;
   border-radius: 8px;
-  border: 1px solid #333;
+  border: 1px solid #323232;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
 }
 
@@ -328,19 +334,14 @@ body {
 
 .conversation-line {
   display: flex;
-  gap: 16px;
+  gap: 8px;
   margin-bottom: 12px;
   line-height: 1.5;
   align-items: flex-start;
 }
 
-.conversation-line.agent {
-  flex-direction: column;
-  gap: 4px;
-}
-
 .line-number {
-  color: #444;
+  color: #606366;
   font-size: 12px;
   min-width: 24px;
   text-align: right;
@@ -348,7 +349,7 @@ body {
 }
 
 .hint {
-  color: #555;
+  color: #606366;
   font-size: 14px;
   text-align: center;
   padding: 40px;
@@ -360,29 +361,29 @@ body {
 }
 
 .conversation-text.user {
-  color: #00ff00;
+  color: #a9b7c6;
 }
 
 .conversation-text.agent {
-  color: #00bfff;
+  color: #a9b7c6;
   font-size: 13px;
 }
 
 .conversation-line.system .conversation-text {
-  color: #f44336;
+  color: #cc7832;
   font-style: italic;
 }
 
 .error {
-  color: #ff5f56;
+  color: #ff6b68;
   font-size: 13px;
   margin-bottom: 12px;
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
+  font-family: inherit;
 }
 
 .command-panel {
-  background-color: #252525;
-  border-top: 1px solid #333;
+  background-color: #3c3f41;
+  border-top: 1px solid #323232;
   padding: 16px 24px;
   min-height: 80px;
 }
@@ -397,28 +398,39 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
-  background-color: #333;
+  background-color: #3c3f41;
   padding: 8px 16px;
   border-radius: 20px;
 }
 
-.agent-badge {
-  font-size: 12px;
-  font-weight: bold;
-  text-transform: uppercase;
-  padding: 4px 8px;
-  background-color: #ffc107;
-  color: #1a1a1a;
-  border-radius: 4px;
+.agent-badge,
+.user-badge {
+  display: none;
+}
+
+.message-block {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.teammate-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: lowercase;
+  color: #808080;
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
 }
 
 .command-text {
   font-size: 14px;
-  color: #ddd;
+  color: #a9b7c6;
 }
 
 .no-commands {
-  color: #555;
+  color: #606366;
   font-size: 14px;
 }
 
@@ -459,7 +471,7 @@ body {
 .readonly-badge {
   font-size: 11px;
   font-weight: bold;
-  text-transform: uppercase;
+  text-transform: lowercase;
   letter-spacing: 1px;
   padding: 2px 8px;
   background-color: rgba(255, 152, 0, 0.2);
@@ -470,7 +482,7 @@ body {
 
 /* Markdown body styling */
 .markdown-body {
-  color: #00bfff;
+  color: #a9b7c6;
   font-size: 14px;
   line-height: 1.6;
   word-break: break-word;
@@ -483,7 +495,7 @@ body {
 
 .markdown-body h1, .markdown-body h2, .markdown-body h3,
 .markdown-body h4, .markdown-body h5, .markdown-body h6 {
-  color: #e0e0e0;
+  color: #ffc66d;
   margin: 12px 0 6px;
   font-weight: 600;
 }
@@ -502,14 +514,14 @@ body {
 }
 
 .markdown-body blockquote {
-  border-left: 3px solid #444;
+  border-left: 3px solid #4e5254;
   padding-left: 12px;
-  color: #999;
+  color: #808080;
   margin: 8px 0;
 }
 
 .markdown-body a {
-  color: #58a6ff;
+  color: #287bde;
   text-decoration: none;
   cursor: pointer;
 }
@@ -519,12 +531,12 @@ body {
 }
 
 .inline-code {
-  background-color: rgba(255, 255, 255, 0.08);
+  background-color: #3c3f41;
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', monospace;
+  font-family: inherit;
   font-size: 13px;
-  color: #e6db74;
+  color: #6a8759;
 }
 
 .markdown-body pre {
@@ -540,28 +552,28 @@ body {
 }
 
 .markdown-body th, .markdown-body td {
-  border: 1px solid #333;
+  border: 1px solid #323232;
   padding: 6px 10px;
   text-align: left;
 }
 
 .markdown-body th {
-  background-color: rgba(255, 255, 255, 0.05);
-  color: #e0e0e0;
+  background-color: #3c3f41;
+  color: #a9b7c6;
 }
 
 .markdown-body hr {
   border: none;
-  border-top: 1px solid #333;
+  border-top: 1px solid #323232;
   margin: 12px 0;
 }
 
 .markdown-body strong {
-  color: #e0e0e0;
+  color: #cc7832;
 }
 
 .markdown-body em {
-  color: #b0b0b0;
+  color: #808080;
 }
 
 .prompt-bar {
@@ -569,15 +581,15 @@ body {
   align-items: flex-end;
   gap: 8px;
   padding: 12px 24px;
-  background-color: #252525;
-  border-top: 1px solid #333;
+  background-color: #3c3f41;
+  border-top: 1px solid #323232;
 }
 
 .prompt-input {
   flex: 1;
   padding: 10px 14px;
-  background-color: #0d0d0d;
-  border: 1px solid #333;
+  background-color: #242628;
+  border: 1px solid #323232;
   border-radius: 6px;
   color: #e0e0e0;
   font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Fira Mono', 'Droid Sans Mono', monospace;
@@ -644,13 +656,13 @@ body {
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background-color: #1a1a1a;
+  background-color: #242628;
   padding: 20px;
 }
 
 .settings-form {
-  background-color: #252525;
-  border: 1px solid #333;
+  background-color: #3c3f41;
+  border: 1px solid #323232;
   border-radius: 8px;
   padding: 32px;
   width: 100%;
@@ -661,13 +673,13 @@ body {
 }
 
 .settings-form h2 {
-  color: #e0e0e0;
+  color: #a9b7c6;
   margin: 0 0 8px;
   font-size: 20px;
 }
 
 .settings-notice {
-  color: #ff9800;
+  color: #cc7832;
   font-size: 13px;
   margin: 0;
 }
@@ -676,28 +688,28 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  color: #aaa;
+  color: #808080;
   font-size: 13px;
 }
 
 .settings-form .required {
-  color: #f44336;
+  color: #cc7832;
 }
 
 .settings-form input,
 .settings-form select {
   padding: 8px 12px;
-  background-color: #0d0d0d;
-  border: 1px solid #333;
+  background-color: #242628;
+  border: 1px solid #323232;
   border-radius: 6px;
-  color: #e0e0e0;
+  color: #a9b7c6;
   font-size: 14px;
   outline: none;
 }
 
 .settings-form input:focus,
 .settings-form select:focus {
-  border-color: #555;
+  border-color: #214283;
 }
 
 .settings-actions {
@@ -709,18 +721,18 @@ body {
 .settings-actions button {
   padding: 8px 20px;
   border-radius: 6px;
-  border: 1px solid #444;
-  background-color: #333;
-  color: #e0e0e0;
+  border: 1px solid #4e5254;
+  background-color: #3c3f41;
+  color: #a9b7c6;
   cursor: pointer;
   font-size: 14px;
   transition: background 0.15s;
 }
 
 .settings-actions button[type="submit"] {
-  background-color: #4caf50;
-  border-color: #4caf50;
-  color: #fff;
+  background-color: #365880;
+  border-color: #365880;
+  color: #a9b7c6;
 }
 
 .settings-actions button:hover {
@@ -736,6 +748,67 @@ body {
 }
 
 .setup-overlay a {
-  color: #4caf50;
+  color: #287bde;
   text-decoration: underline;
+}
+
+/* ── Help Tooltip ──────────────────────────────────────────────── */
+
+.help-tooltip-wrapper {
+  display: inline-block;
+  position: relative;
+  margin-left: 6px;
+}
+
+.help-tooltip-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid #4e5254;
+  background: #3c3f41;
+  color: #808080;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  line-height: 16px;
+  vertical-align: middle;
+}
+
+.help-tooltip-btn:hover {
+  border-color: #606366;
+  color: #a9b7c6;
+}
+
+.help-tooltip-popover {
+  position: absolute;
+  left: 24px;
+  top: -4px;
+  z-index: 100;
+  background: #3c3f41;
+  border: 1px solid #4e5254;
+  border-radius: 6px;
+  padding: 10px 14px;
+  min-width: 240px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.help-tooltip-popover ol {
+  margin: 0;
+  padding-left: 18px;
+  color: #a9b7c6;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.help-tooltip-popover a {
+  display: inline-block;
+  margin-top: 6px;
+  color: #287bde;
+  font-size: 12px;
+  text-decoration: underline;
+}
+
+.settings-hint {
+  color: #666;
+  font-size: 11px;
 }

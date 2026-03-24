@@ -1,17 +1,14 @@
-import { setDefaultModelProvider, OpenAIProvider } from '@openai/agents';
-import { getXAIConfig } from '../core/config.js';
-import logger from '../core/logger.js';
+import { initPool } from '../core/providers.js';
 
 let initialized = false;
 
 export function ensureProvider(): void {
   if (initialized) return;
-  const config = getXAIConfig();
-  setDefaultModelProvider(new OpenAIProvider({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-    useResponses: false,
-  }));
+  initPool();
   initialized = true;
-  logger.info('[provider] OpenAI provider initialized, baseURL: ' + config.baseURL);
+}
+
+export function reinitProvider(): void {
+  initPool();
+  initialized = true;
 }

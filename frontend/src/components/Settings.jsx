@@ -1,15 +1,37 @@
 import { useState, useMemo } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNavigate } from 'react-router-dom';
+import HelpTooltip from './HelpTooltip';
+
+const PROVIDER_HELP = {
+  XAI_API_KEY: {
+    steps: ['Go to console.x.ai', 'Sign up or log in', 'Navigate to API Keys → Create new key', 'Free credits included with new accounts'],
+    link: 'https://console.x.ai',
+    linkText: 'console.x.ai',
+  },
+  GEMINI_API_KEY: {
+    steps: ['Go to aistudio.google.com', 'Sign in with Google account', 'Click "Get API key" → Create key', 'Free tier: 15 requests/minute'],
+    link: 'https://aistudio.google.com',
+    linkText: 'aistudio.google.com',
+  },
+  GROQ_API_KEY: {
+    steps: ['Go to console.groq.com', 'Sign up or log in', 'Navigate to API Keys → Create', 'Free tier: ~30 requests/minute'],
+    link: 'https://console.groq.com',
+    linkText: 'console.groq.com',
+  },
+};
 
 export default function Settings() {
   const { settings, updateSettings, setupRequired } = useSettings();
   const navigate = useNavigate();
-  const hasApiKey = !!(settings.OPENAI_API_KEY);
+  const hasKeys = !!(settings.XAI_API_KEY || settings.GEMINI_API_KEY || settings.GROQ_API_KEY);
 
   const initial = useMemo(() => ({
-    OPENAI_API_KEY: '',
-    OPENAI_BASE_URL: settings.OPENAI_BASE_URL || 'https://api.x.ai/v1',
+    LLM_PROVIDERS: settings.LLM_PROVIDERS || 'xai',
+    XAI_API_KEY: '',
+    GEMINI_API_KEY: '',
+    GROQ_API_KEY: '',
+    STT_PROVIDER: settings.STT_PROVIDER || 'xai',
     PORT: settings.PORT || '5000',
     CODING_CLI: settings.CODING_CLI || 'opencode',
     IDE_TYPE: settings.IDE_TYPE || 'jetbrains',
@@ -22,9 +44,12 @@ export default function Settings() {
   const handleSave = async (e) => {
     e.preventDefault();
     const updates = { ...form };
-    if (!updates.OPENAI_API_KEY) delete updates.OPENAI_API_KEY;
+    // Don't send empty API key fields (keeps existing values)
+    for (const key of ['XAI_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY']) {
+      if (!updates[key]) delete updates[key];
+    }
     await updateSettings(updates);
-    if ((form.OPENAI_API_KEY || hasApiKey)) navigate('/');
+    if (hasKeys || form.XAI_API_KEY || form.GEMINI_API_KEY || form.GROQ_API_KEY) navigate('/');
   };
 
   const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }));
@@ -36,13 +61,33 @@ export default function Settings() {
         {setupRequired && <p className="settings-notice">Please configure required settings to continue.</p>}
 
         <label>
-          API Key <span className="required">*</span>
-          <input type="password" value={form.OPENAI_API_KEY} placeholder={hasApiKey ? settings.OPENAI_API_KEY : 'your-xai-api-key-here'} onChange={set('OPENAI_API_KEY')} required={!hasApiKey} />
+          LLM Providers <span className="required">*</span>
+          <input type="text" value={form.LLM_PROVIDERS} onChange={set('LLM_PROVIDERS')} placeholder="xai,gemini,groq" required />
+          <span className="settings-hint">Comma-separated, first = primary. Available: xai, gemini, groq</span>
         </label>
 
         <label>
-          Base URL
-          <input type="text" value={form.OPENAI_BASE_URL} onChange={set('OPENAI_BASE_URL')} />
+          xAI API Key <HelpTooltip {...PROVIDER_HELP.XAI_API_KEY} />
+          <input type="password" value={form.XAI_API_KEY} placeholder={settings.XAI_API_KEY || 'your-xai-api-key'} onChange={set('XAI_API_KEY')} />
+        </label>
+
+        <label>
+          Gemini API Key <HelpTooltip {...PROVIDER_HELP.GEMINI_API_KEY} />
+          <input type="password" value={form.GEMINI_API_KEY} placeholder={settings.GEMINI_API_KEY || 'your-gemini-api-key'} onChange={set('GEMINI_API_KEY')} />
+        </label>
+
+        <label>
+          Groq API Key <HelpTooltip {...PROVIDER_HELP.GROQ_API_KEY} />
+          <input type="password" value={form.GROQ_API_KEY} placeholder={settings.GROQ_API_KEY || 'your-groq-api-key'} onChange={set('GROQ_API_KEY')} />
+        </label>
+
+        <label>
+          STT Provider
+          <select value={form.STT_PROVIDER} onChange={set('STT_PROVIDER')}>
+            <option value="xai">xAI Realtime (WebSocket, real-time)</option>
+            <option value="groq">Groq Whisper (batch, free)</option>
+          </select>
+          <span className="settings-hint">xAI = real-time streaming, Groq = slight delay but free tier</span>
         </label>
 
         <label>

@@ -1,22 +1,28 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { run } from '@openai/agents';
+import { Runner } from '@openai/agents';
 import type { Server } from 'socket.io';
 import logger from './core/logger.js';
 import { getXAIConfig } from './core/config.js';
+import { resetRotation, rotateProvider, getCurrentModel, getCurrentProviderName } from './core/providers.js';
 import { SessionStore } from './core/session.js';
 import { createSignal, abortAll, cleanup, isStopCommand } from './core/interrupt.js';
-import { XAIVoiceClient } from './agents/voice/index.js';
+import { createVoiceClient, type VoiceTransport } from './agents/voice/index.js';
 import { buildAgentGraph, killTerminalProcess, isPlannerExit } from './agents/index.js';
 import type { AppContext } from './agents/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const XAI_API_KEY = process.env.OPENAI_API_KEY || process.env.XAI_API_KEY;
+const getXaiApiKey = () => process.env.XAI_API_KEY;
+const getSttApiKey = () => {
+  const provider = process.env.STT_PROVIDER || 'xai';
+  if (provider === 'groq') return process.env.GROQ_API_KEY;
+  return process.env.XAI_API_KEY;
+};
 
 const socketSession = new Map<string, string>();
 const statusMap = new Map<string, string>();
 const readOnlyMap = new Map<string, boolean>();
-const xaiClients = new Map<string, XAIVoiceClient>();
+const voiceClients = new Map<string, VoiceTransport>();
 const pendingPlans = new Map<string, string>();
 const plannerMode = new Map<string, boolean>();
 
@@ -66,12 +72,6 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
   const inPlannerMode = sessionId ? (plannerMode.get(sessionId) ?? false) : false;
   logger.info({ sid }, `[orchestrator] Processing, text_len=${transcription.length}, readOnly=${isReadOnly}, plannerMode=${inPlannerMode}`);
 
-  const graph = await buildAgentGraph({
-    readOnly: isReadOnly,
-    plannerMode: inPlannerMode,
-    pendingPlan,
-  });
-
   const signal = createSignal(sid);
   const agentSessionId = sessionId || sid;
   const session = new SessionStore(agentSessionId);
@@ -90,18 +90,60 @@ async function processWithOrchestrator(transcription: string, sid: string, io: S
 
   io.to(sid).emit('transcription_result', { original_text: transcription, prompts: [] });
 
+  const isRetryable = (err: unknown): boolean => {
+    if (err && typeof err === 'object') {
+      const e = err as any;
+      const status = e.status ?? e.code;
+      if ([400, 404, 429, 500, 502, 503].includes(status)) return true;
+      if (typeof e.message === 'string' && (e.message.includes('429') || e.message.toLowerCase().includes('rate limit') || e.message.toLowerCase().includes('model not found'))) return true;
+    }
+    return false;
+  };
+
   try {
-    const result = await run(graph.orchestrator, transcription, {
-      signal,
-      session,
-      context,
-      maxTurns: 30,
+    resetRotation();
+    let graph = await buildAgentGraph({
+      readOnly: isReadOnly,
+      plannerMode: inPlannerMode,
+      pendingPlan,
     });
+    logger.info({ sid }, `[run] Starting with provider=${getCurrentProviderName()}, model=${getCurrentModel()}`);
+
+    let result;
+    let retries = 0;
+    while (true) {
+      try {
+        result = await new Runner().run(graph.orchestrator, transcription, {
+          signal,
+          session,
+          context,
+          maxTurns: 30,
+        });
+        break;
+      } catch (error) {
+        if (isRetryable(error)) {
+          if (rotateProvider()) {
+            logger.warn({ sid }, `[run] Error from ${getCurrentProviderName()} (${(error as any).status || 'unknown'}), rotating to next provider`);
+            io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: String((error as any).status || 'error') });
+            graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
+            continue;
+          }
+          if (retries < 1) {
+            retries++;
+            logger.warn({ sid }, `[run] Retryable error (${(error as any).status || 'unknown'}), retrying same provider`);
+            resetRotation();
+            graph = await buildAgentGraph({ readOnly: isReadOnly, plannerMode: inPlannerMode, pendingPlan });
+            continue;
+          }
+        }
+        throw error;
+      }
+    }
 
     const output = result.finalOutput || '';
     const lastAgentName = result.lastAgent?.name || 'Orchestrator';
 
-    logger.info({ sid }, `[run] Completed. lastAgent=${lastAgentName}, output_len=${output.length}`);
+    logger.info({ sid }, `[run] Completed. provider=${getCurrentProviderName()}, lastAgent=${lastAgentName}, output_len=${output.length}, output_preview=${JSON.stringify(output.slice(0, 200))}`);
 
     if (isPlannerExit(output) && sessionId) {
       plannerMode.delete(sessionId);
@@ -183,11 +225,12 @@ export function registerSocketHandlers(io: Server): void {
     });
 
     socket.on('start_transcription_stream', async () => {
-      if (!XAI_API_KEY) {
-        socket.emit('error', { message: 'OPENAI_API_KEY not configured on server.' });
+      const apiKey = getSttApiKey();
+      if (!apiKey) {
+        socket.emit('error', { message: 'STT provider API key not configured on server.' });
         return;
       }
-      if (xaiClients.has(sid)) {
+      if (voiceClients.has(sid)) {
         socket.emit('error', { message: 'Transcription stream already active.' });
         return;
       }
@@ -195,8 +238,9 @@ export function registerSocketHandlers(io: Server): void {
       ensureSession(sid, socket);
       statusMap.set(sid, 'idle');
 
-      const xaiClient = new XAIVoiceClient(XAI_API_KEY, sid);
-      xaiClient.setCallbacks(
+      const sttProvider = process.env.STT_PROVIDER || 'xai';
+      const voiceClient = createVoiceClient(sttProvider, apiKey, sid);
+      voiceClient.setCallbacks(
         (transcript: string) => {
           io.to(sid).emit('transcription_update', { type: 'transcript', text: transcript });
           statusMap.set(sid, 'executing');
@@ -205,27 +249,27 @@ export function registerSocketHandlers(io: Server): void {
         },
         (status: string) => { io.to(sid).emit('status', { status }); },
         (error: string) => {
-          logger.info({ sid }, `[x.ai] Error: ${error}`);
+          logger.info({ sid }, `[voice] Error: ${error}`);
           io.to(sid).emit('error', { message: error });
         },
       );
 
       try {
-        await xaiClient.connect();
-        xaiClients.set(sid, xaiClient);
-        socket.emit('transcription_started', { message: 'Connected to x.ai and ready for audio.' });
+        await voiceClient.connect();
+        voiceClients.set(sid, voiceClient);
+        socket.emit('transcription_started', { message: 'Connected to STT provider and ready for audio.' });
         socket.emit('status', { status: 'idle' });
         logger.info({ sid }, '[socketio] Transcription stream started');
       } catch (error) {
-        logger.info({ sid }, `[x.ai] Failed to connect: ${error}`);
-        socket.emit('error', { message: `Failed to connect to x.ai: ${error}` });
-        xaiClients.delete(sid);
+        logger.info({ sid }, `[voice] Failed to connect: ${error}`);
+        socket.emit('error', { message: `Failed to connect to STT provider: ${error}` });
+        voiceClients.delete(sid);
       }
     });
 
     socket.on('audio_chunk', (data: unknown) => {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
-      xaiClients.get(sid)?.sendAudio(buffer.toString('base64'));
+      voiceClients.get(sid)?.sendAudio(buffer.toString('base64'));
       const currentStatus = statusMap.get(sid);
       if (currentStatus === 'idle' || currentStatus === undefined) {
         statusMap.set(sid, 'listening');
@@ -235,15 +279,15 @@ export function registerSocketHandlers(io: Server): void {
 
     socket.on('commit_audio', () => {
       logger.info({ sid }, '[socketio] commit_audio received');
-      xaiClients.get(sid)?.commitAudio();
+      voiceClients.get(sid)?.commitAudio();
     });
 
     socket.on('stop_transcription_stream', async () => {
       logger.info({ sid }, '[socketio] stop_transcription_stream');
-      const xaiClient = xaiClients.get(sid);
-      if (xaiClient) {
-        xaiClient.close();
-        xaiClients.delete(sid);
+      const client = voiceClients.get(sid);
+      if (client) {
+        client.close();
+        voiceClients.delete(sid);
         socket.emit('transcription_stopped', { message: 'Transcription stream stopped.' });
       } else {
         socket.emit('error', { message: 'No active transcription stream to stop.' });
@@ -273,10 +317,10 @@ export function registerSocketHandlers(io: Server): void {
       abortAll(sid);
       cleanup(sid);
       socketSession.delete(sid);
-      const xaiClient = xaiClients.get(sid);
-      if (xaiClient) {
-        xaiClient.close();
-        xaiClients.delete(sid);
+      const client = voiceClients.get(sid);
+      if (client) {
+        client.close();
+        voiceClients.delete(sid);
       }
       statusMap.delete(sid);
       readOnlyMap.delete(sid);

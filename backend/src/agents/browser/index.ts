@@ -1,7 +1,14 @@
 import { Agent } from '@openai/agents';
 import { MCPServerStdio } from '@openai/agents';
 import type { AppContext } from '../context.js';
-import { getXAIConfig } from '../../core/config.js';
+import { getAgentModel } from '../../core/providers.js';
+
+// Browser = precise tool calling, needs strong models
+const MODELS: Record<string, string> = {
+  xai:    'grok-4.20-0309-non-reasoning',
+  gemini: 'gemini-3.1-pro-preview',
+  groq:   'openai/gpt-oss-120b',
+};
 import logger from '../../core/logger.js';
 import { ensureProvider } from '../provider.js';
 import { readOnlyGuardrail } from '../guardrails.js';
@@ -59,7 +66,7 @@ export async function createBrowserAgent(readOnly = false): Promise<Agent<AppCon
     handoffDescription: 'Controls web browser — browsing, navigation, searching, clicking, scrolling, page interaction.',
     instructions: INSTRUCTIONS,
     mcpServers: [mcp],
-    model: getXAIConfig().model,
+    model: getAgentModel(MODELS),
     inputGuardrails: readOnly ? [readOnlyGuardrail] : [],
   });
 }

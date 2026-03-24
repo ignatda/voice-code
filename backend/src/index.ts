@@ -1,6 +1,7 @@
 // Load .env BEFORE agent imports (agents SDK sets up tracing at import time)
-import { loadEnv } from './core/config.js';
+import { loadEnv, bootstrapPrimaryProvider } from './core/config.js';
 loadEnv();
+bootstrapPrimaryProvider();
 
 const { default: logger } = await import('./core/logger.js');
 logger.info('Loading .env via config/env');

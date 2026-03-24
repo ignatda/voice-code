@@ -14,7 +14,9 @@ export async function loadEnv() {
 export async function saveEnv(updates) {
   // Never send masked API key values
   const clean = { ...updates };
-  if (clean.OPENAI_API_KEY && clean.OPENAI_API_KEY.startsWith('••')) delete clean.OPENAI_API_KEY;
+  for (const key of ['XAI_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY']) {
+    if (clean[key] && clean[key].startsWith('••')) delete clean[key];
+  }
 
   try {
     await fetch(API_BASE, {

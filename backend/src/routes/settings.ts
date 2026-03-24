@@ -1,5 +1,7 @@
 import { Router, json } from 'express';
-import { validateEnv, writeEnv, getSettingsSnapshot } from '../core/config.js';
+import { validateEnv, writeEnv, getSettingsSnapshot, bootstrapPrimaryProvider } from '../core/config.js';
+import { reinitProvider } from '../agents/provider.js';
+import logger from '../core/logger.js';
 
 const router = Router();
 router.use(json());
@@ -28,7 +30,7 @@ router.post('/', (req, res) => {
   }
 
   // Only allow known safe keys to be written
-  const allowed = new Set(['OPENAI_API_KEY', 'OPENAI_BASE_URL', 'PORT', 'CODING_CLI', 'IDE_TYPE', 'EXTENSIONS', 'SCHEDULED_TASKS']);
+  const allowed = new Set(['LLM_PROVIDERS', 'XAI_API_KEY', 'GEMINI_API_KEY', 'GROQ_API_KEY', 'STT_PROVIDER', 'PORT', 'CODING_CLI', 'IDE_TYPE', 'EXTENSIONS', 'SCHEDULED_TASKS']);
   const invalid = Object.keys(updates).filter(k => !allowed.has(k));
   if (invalid.length) {
     res.status(400).json({ error: `Disallowed keys: ${invalid.join(', ')}` });
@@ -36,6 +38,12 @@ router.post('/', (req, res) => {
   }
 
   writeEnv(updates);
+  const masked = Object.fromEntries(Object.entries(updates).map(([k, v]) =>
+    [k, k.includes('KEY') ? '••••' + v.slice(-4) : v]
+  ));
+  logger.info({ settings: masked }, '[settings] Updated by user');
+  bootstrapPrimaryProvider();
+  reinitProvider();
   const validation = validateEnv();
   res.json({ ok: true, validation });
 });

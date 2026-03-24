@@ -7,9 +7,46 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ENV_PATH = path.resolve(__dirname, '..', '..', '.env');
 const AGENTS_MD_PATH = path.resolve(__dirname, '..', '..', '..', 'AGENTS.md');
 
+// ── Provider registry ───────────────────────────────────────────────────────
+
+export interface ProviderConfig {
+  name: string;
+  apiKey: string;
+  baseURL: string;
+  model: string;
+}
+
+const PROVIDER_REGISTRY: Record<string, { baseURL: string; defaultModel: string; keyEnv: string }> = {
+  xai:    { baseURL: 'https://api.x.ai/v1',                                    defaultModel: 'grok-4-1-fast-non-reasoning', keyEnv: 'XAI_API_KEY' },
+  gemini: { baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/', defaultModel: 'gemini-3-flash-preview',            keyEnv: 'GEMINI_API_KEY' },
+  groq:   { baseURL: 'https://api.groq.com/openai/v1',                         defaultModel: 'llama-3.3-70b-versatile',     keyEnv: 'GROQ_API_KEY' },
+};
+
+export function getProviderConfigs(): ProviderConfig[] {
+  const list = (process.env.LLM_PROVIDERS || '').split(',').map(s => s.trim()).filter(Boolean);
+  return list
+    .filter(name => PROVIDER_REGISTRY[name])
+    .map(name => {
+      const reg = PROVIDER_REGISTRY[name];
+      return { name, apiKey: process.env[reg.keyEnv] || '', baseURL: reg.baseURL, model: reg.defaultModel };
+    })
+    .filter(c => c.apiKey);
+}
+
+export function bootstrapPrimaryProvider(): void {
+  const configs = getProviderConfigs();
+  if (configs.length === 0) return;
+  const primary = configs[0];
+  process.env.OPENAI_API_KEY = primary.apiKey;
+  process.env.OPENAI_BASE_URL = primary.baseURL;
+  process.env.OPENAI_MODEL = primary.model;
+}
+
 // ── Env loading ─────────────────────────────────────────────────────────────
 
-const REQUIRED_KEYS = ['OPENAI_API_KEY'] as const;
+export function loadEnv(): void {
+  dotenv.config({ path: ENV_PATH, override: true });
+}
 
 export interface ValidationResult {
   valid: boolean;
@@ -17,21 +54,20 @@ export interface ValidationResult {
   errors: string[];
 }
 
-export function loadEnv(): void {
-  dotenv.config({ path: ENV_PATH, override: true });
-}
-
 export function validateEnv(): ValidationResult {
-  const missing: string[] = [];
   const errors: string[] = [];
+  const missing: string[] = [];
 
-  for (const key of REQUIRED_KEYS) {
-    if (!process.env[key]) missing.push(key);
+  if (!process.env.LLM_PROVIDERS) missing.push('LLM_PROVIDERS');
+
+  const configs = getProviderConfigs();
+  if (process.env.LLM_PROVIDERS && configs.length === 0) {
+    errors.push('No valid API keys found for providers listed in LLM_PROVIDERS');
   }
 
   if (missing.length) errors.push(`Missing required env vars: ${missing.join(', ')}`);
 
-  return { valid: missing.length === 0, missing, errors };
+  return { valid: errors.length === 0, missing, errors };
 }
 
 export function writeEnv(updates: Record<string, string>): void {
@@ -53,12 +89,16 @@ export function writeEnv(updates: Record<string, string>): void {
   loadEnv();
 }
 
+const maskKey = (key: string) => key ? '••••' + key.slice(-4) : '';
+
 /** Keys safe to expose via GET */
 export function getSettingsSnapshot(): Record<string, string> {
-  const apiKey = process.env.OPENAI_API_KEY || '';
   return {
-    OPENAI_API_KEY: apiKey ? '••••' + apiKey.slice(-4) : '',
-    OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || 'https://api.x.ai/v1',
+    LLM_PROVIDERS: process.env.LLM_PROVIDERS || '',
+    XAI_API_KEY: maskKey(process.env.XAI_API_KEY || ''),
+    GEMINI_API_KEY: maskKey(process.env.GEMINI_API_KEY || ''),
+    GROQ_API_KEY: maskKey(process.env.GROQ_API_KEY || ''),
+    STT_PROVIDER: process.env.STT_PROVIDER || 'xai',
     PORT: process.env.PORT || '5000',
     CODING_CLI: process.env.CODING_CLI || 'opencode',
     IDE_TYPE: process.env.IDE_TYPE || 'jetbrains',

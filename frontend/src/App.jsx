@@ -388,14 +388,14 @@ function MainApp() {
             {conversationItems.map((item, index) => (
               <div key={index} className={`conversation-line ${item.type}`}>
                 <span className="line-number">{index + 1}</span>
-                {item.type === 'agent' && (
-                  <span className="agent-badge">{item.agent}</span>
-                )}
-                {item.type === 'agent' ? (
-                  <MarkdownMessage text={item.text} />
-                ) : (
-                  <span className={`conversation-text ${item.type}`}>{item.text}</span>
-                )}
+                <div className="message-block">
+                  <span className="teammate-label">{item.type === 'user' ? 'user' : item.type === 'agent' ? item.agent : 'system'}</span>
+                  {item.type === 'agent' ? (
+                    <MarkdownMessage text={item.text} />
+                  ) : (
+                    <span className={`conversation-text ${item.type}`}>{item.text}</span>
+                  )}
+                </div>
               </div>
             ))}
             <div ref={conversationEndRef} />
