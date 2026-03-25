@@ -24,8 +24,8 @@ This document provides guidelines for agentic coding agents operating in this re
 
 ### Feature Specs
 
-- Feature specifications live in `.agents/features/<feature-name>.md` files
-- Create new specs (feature planning, feature descriptions) in `.agents/features/<feature-name>.md` files
+- Feature specifications live in `.agents/features/<YYYYMMDD>.<feature-name>.md` files
+- Create new specs (feature planning, feature descriptions) in `.agents/features/<YYYYMMDD>.<feature-name>.md` files
 - Do not create new specs without explicit user approval
 - Always check this directory before implementing a new feature — a spec may already exist
 - Follow the spec precisely when one is provided
