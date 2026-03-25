@@ -42,6 +42,7 @@ This document provides guidelines for agentic coding agents operating in this re
 2. **Clean up code before every commit** — remove dead code, unused imports, debug logs, and leftover TODOs.
 3. **Check for security issues and fix them before commit** — scan for hardcoded secrets, exposed credentials, injection vulnerabilities, and unsafe dependencies.
 4. **Run linter before every commit** — check and fix ESLint/TypeScript errors in changed files before committing.
+5. **Update AGENTS.md and README.md when completing a feature** — ensure env vars table, architecture section, file structure, and configuration docs reflect the changes.
 
 <!-- END LOCKED SECTION -->
 
@@ -52,20 +53,20 @@ This document provides guidelines for agentic coding agents operating in this re
 - Store secrets in `.env` (never commit), use `.env.example` as template
 - Access via `process.env` in Node.js, `import.meta.env` in Vite
 
-| Variable                        | Values                                   | Default     | Description                                         |
-|---------------------------------|------------------------------------------|-------------|-----------------------------------------------------|
-| `LLM_PROVIDERS`                 | comma-separated: `xai`, `gemini`, `groq` | `xai`       | Provider list: first = primary, rest = fallbacks    |
-| `XAI_API_KEY`                   | string                                   | —           | x.ai API key                                        |
-| `GEMINI_API_KEY`                | string                                   | —           | Google Gemini API key                               |
-| `GROQ_API_KEY`                  | string                                   | —           | Groq API key                                        |
-| `OPENAI_AGENTS_DISABLE_TRACING` | `1`                                      | `1`         | Must be `1` — SDK tracing is incompatible with Grok |
-| `TTS_MAX_LENGTH`                | number                                   | `500`       | Skip TTS for long responses                         |
-| `IDE_TYPE`                      | `jetbrains`, `vscode`, `none`            | `jetbrains` | IDE integration                                     |
-| `CODING_CLI`                    | `opencode`, `kiro-cli`, `none`           | `opencode`  | CLI tool for coding tasks                           |
-| `EXTENSIONS`                    | comma-separated names or `none`          | `none`      | Enable extension agents                             |
-| `SCHEDULED_TASKS`               | comma-separated names or `none`          | `none`      | Enable scheduled tasks                              |
-| `ORCHESTRATOR_TYPE`             | `piped`, `native`                        | `piped`     | Orchestrator mode (native = xAI Realtime voice agent)|
-| `PORT`                          | number                                   | `5000`      | Backend server port                                 |
+| Variable                        | Values                                   | Default     | Description                                           |
+|---------------------------------|------------------------------------------|-------------|-------------------------------------------------------|
+| `LLM_PROVIDERS`                 | comma-separated: `xai`, `gemini`, `groq` | `xai`       | Provider list: first = primary, rest = fallbacks      |
+| `XAI_API_KEY`                   | string                                   | —           | x.ai API key                                          |
+| `GEMINI_API_KEY`                | string                                   | —           | Google Gemini API key                                 |
+| `GROQ_API_KEY`                  | string                                   | —           | Groq API key                                          |
+| `OPENAI_AGENTS_DISABLE_TRACING` | `1`                                      | `1`         | Must be `1` — SDK tracing is incompatible with Grok   |
+| `TTS_MAX_LENGTH`                | number                                   | `500`       | Skip TTS for long responses                           |
+| `IDE_TYPE`                      | `jetbrains`, `vscode`, `none`            | `jetbrains` | IDE integration                                       |
+| `CODING_CLI`                    | `opencode`, `kiro-cli`, `none`           | `opencode`  | CLI tool for coding tasks                             |
+| `EXTENSIONS`                    | comma-separated names or `none`          | `none`      | Enable extension agents                               |
+| `SCHEDULED_TASKS`               | comma-separated names or `none`          | `none`      | Enable scheduled tasks                                |
+| `ORCHESTRATOR_TYPE`             | `piped`, `native`                        | `piped`     | Orchestrator mode (native = xAI Realtime voice agent) |
+| `PORT`                          | number                                   | `5000`      | Backend server port                                   |
 
 ### Important Gotchas
 
