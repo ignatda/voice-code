@@ -7,7 +7,7 @@ Real-time voice-to-code IDE powered by a multi-agent architecture. Speak command
 ```bash
 # 1. Configure environment
 cp .env.example backend/.env
-# Edit backend/.env — set your OPENAI_API_KEY (x.ai key)
+# Edit backend/.env — set your XAI_API_KEY
 
 # 2. Start with Docker
 docker-compose up --build
@@ -34,17 +34,20 @@ All agents use the [OpenAI Agents SDK](https://github.com/openai/openai-agents-j
 
 Settings are managed via environment variables (`.env`) or the Settings UI at runtime.
 
-| Variable | Values | Default | Description |
-|---|---|---|---|
-| `OPENAI_API_KEY` | string | — | x.ai API key (required) |
-| `OPENAI_BASE_URL` | URL | `https://api.x.ai/v1` | LLM API endpoint |
-| `OPENAI_MODEL` | string | `grok-4-1-fast-non-reasoning` | Model name |
-| `IDE_TYPE` | `jetbrains`, `vscode`, `none` | `jetbrains` | IDE integration |
-| `CODING_CLI` | `opencode`, `kiro-cli`, `none` | `opencode` | CLI tool for coding tasks |
-| `EXTENSIONS` | comma-separated names or `none` | `none` | Enable extension agents |
-| `TTS_PROVIDER` | `xai`, `groq`, `gemini`, `none` | (same as STT_PROVIDER) | TTS provider |
-| `TTS_MAX_LENGTH` | number | `500` | Skip TTS for long responses |
-| `PORT` | number | `5000` | Backend server port |
+| Variable          | Values                                   | Default     | Description                                      |
+|-------------------|------------------------------------------|-------------|--------------------------------------------------|
+| `LLM_PROVIDERS`   | comma-separated: `xai`, `gemini`, `groq` | `xai`       | Provider list: first = primary, rest = fallbacks |
+| `XAI_API_KEY`     | string                                   | —           | x.ai API key                                     |
+| `GEMINI_API_KEY`  | string                                   | —           | Google Gemini API key                            |
+| `GROQ_API_KEY`    | string                                   | —           | Groq API key                                     |
+| `STT_PROVIDER`    | `xai`, `groq`                            | `xai`       | Speech-to-text provider                          |
+| `TTS_PROVIDER`    | `xai`, `groq`, `gemini`, `none`          | `xai`       | Text-to-speech provider                          |
+| `TTS_MAX_LENGTH`  | number                                   | `500`       | Skip TTS for long responses                      |
+| `IDE_TYPE`        | `jetbrains`, `vscode`, `none`            | `jetbrains` | IDE integration                                  |
+| `CODING_CLI`      | `opencode`, `kiro-cli`, `none`           | `opencode`  | CLI tool for coding tasks                        |
+| `EXTENSIONS`      | comma-separated names or `none`          | `none`      | Enable extension agents                          |
+| `SCHEDULED_TASKS` | comma-separated names or `none`          | `none`      | Enable scheduled tasks                           |
+| `PORT`            | number                                   | `5000`      | Backend server port                              |
 
 ## Extensions
 
@@ -95,13 +98,13 @@ EXTENSIONS=none     # disable it (default)
 
 ## Agents
 
-| Agent | Role | Tools |
-|---|---|---|
-| Orchestrator | Routes commands, translates input | `translate_to_english`, handoffs |
-| Browser | Web browsing and page interaction | Playwright MCP |
-| IDE | Code editing, navigation, commands | JetBrains/VS Code MCP + CLI |
-| Planner | Design implementation plans | None (chat only) |
-| Voice | Voice input/output (PCM16 24kHz) | x.ai Realtime API |
+| Agent        | Role                               | Tools                       |
+|--------------|------------------------------------|-----------------------------|
+| Orchestrator | Routes commands                    | handoffs                    |
+| Browser      | Web browsing and page interaction  | Playwright MCP              |
+| IDE          | Code editing, navigation, commands | JetBrains/VS Code MCP + CLI |
+| Planner      | Design implementation plans        | None (chat only)            |
+| Voice        | Voice input/output (PCM16 24kHz)   | x.ai Realtime API           |
 
 ## Development
 

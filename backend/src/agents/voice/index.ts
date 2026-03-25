@@ -6,7 +6,7 @@ import { GroqTransport } from './stt/groq.js';
 import { GeminiTransport } from './stt/gemini.js';
 export { createTTSClient } from './tts/index.js';
 
-export function createVoiceClient(provider: string, apiKey: string, sid: string): VoiceTransport {
+export function createSTTClient(provider: string, apiKey: string, sid: string): VoiceTransport {
   switch (provider) {
     case 'groq':   return new GroqTransport(apiKey, sid);
     case 'gemini': return new GeminiTransport(apiKey, sid);

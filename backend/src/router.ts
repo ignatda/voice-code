@@ -7,7 +7,7 @@ import { getXAIConfig } from './core/config.js';
 import { resetRotation, rotateProvider, getCurrentModel, getCurrentProviderName } from './core/providers.js';
 import { SessionStore } from './core/session.js';
 import { createSignal, abortAll, cleanup, isStopCommand } from './core/interrupt.js';
-import { createVoiceClient, createTTSClient, type VoiceTransport, type TTSTransport } from './agents/voice/index.js';
+import { createSTTClient, createTTSClient, type VoiceTransport, type TTSTransport } from './agents/voice/index.js';
 import { buildAgentGraph, killTerminalProcess, isPlannerExit } from './agents/index.js';
 import type { AppContext } from './agents/index.js';
 
@@ -321,7 +321,7 @@ export function registerSocketHandlers(io: Server): void {
       statusMap.set(sid, 'idle');
 
       const sttProvider = process.env.STT_PROVIDER || 'xai';
-      const voiceClient = createVoiceClient(sttProvider, apiKey, sid);
+      const voiceClient = createSTTClient(sttProvider, apiKey, sid);
       voiceClient.setCallbacks(
         (transcript: string) => {
           io.to(sid).emit('transcription_update', { type: 'transcript', text: transcript });
