@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useSettings } from '../contexts/SettingsContext';
 import { useNavigate } from 'react-router-dom';
 import HelpTooltip from './HelpTooltip';
+import { getTheme, applyTheme, getThemes } from '../themes/index.js';
 
 const PROVIDER_HELP = {
   XAI_API_KEY: {
@@ -25,6 +26,7 @@ export default function Settings() {
   const { settings, updateSettings, setupRequired } = useSettings();
   const navigate = useNavigate();
   const hasKeys = !!(settings.XAI_API_KEY || settings.GEMINI_API_KEY || settings.GROQ_API_KEY);
+  const [theme, setTheme] = useState(getTheme);
 
   const initial = useMemo(() => ({
     LLM_PROVIDERS: settings.LLM_PROVIDERS || 'xai',
@@ -129,6 +131,13 @@ export default function Settings() {
             <option value="native">Native (xAI Realtime voice agent)</option>
           </select>
           <span className="settings-hint">Native mode uses xAI Realtime API as both voice and brain — lower latency, single connection.</span>
+        </label>
+
+        <label>
+          UI Theme
+          <select value={theme} onChange={e => { setTheme(e.target.value); applyTheme(e.target.value); }}>
+            {getThemes().map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
         </label>
 
         <div className="settings-actions">
