@@ -36,6 +36,7 @@ This document provides guidelines for agentic coding agents operating in this re
 1. **Commit only when the user explicitly asks** — never auto-commit.
 2. **Clean up code before every commit** — remove dead code, unused imports, debug logs, and leftover TODOs.
 3. **Check for security issues and fix them before commit** — scan for hardcoded secrets, exposed credentials, injection vulnerabilities, and unsafe dependencies.
+4. **Run linter before every commit** — check and fix ESLint/TypeScript errors in changed files before committing.
 
 <!-- END LOCKED SECTION -->
 

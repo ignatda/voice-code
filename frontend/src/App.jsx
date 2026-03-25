@@ -34,7 +34,7 @@ function MainApp() {
   const pcmNextTimeRef = useRef(0);
   const pcmPlayingRef = useRef(false);
   const pcmContextRef = useRef(null);
-  const [ttsEnabled, setTtsEnabled] = useState(() => localStorage.getItem('ttsEnabled') === 'true');
+  const [ttsEnabled, setTtsEnabled] = useState(false);
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const ttsPlayingRef = useRef(false);
 
@@ -64,6 +64,8 @@ function MainApp() {
     socketRef.current.on('disconnect', () => {
       setIsConnected(false);
       setMicEnabled(false);
+    setTtsEnabled(false);
+    if (socketRef.current) socketRef.current.emit('set_tts_enabled', false);
       setStatus('idle');
     });
 
@@ -142,6 +144,8 @@ function MainApp() {
     socketRef.current.on('error', (data) => {
       setError(data.message);
       setMicEnabled(false);
+      setTtsEnabled(false);
+      if (socketRef.current) socketRef.current.emit('set_tts_enabled', false);
       setStatus('idle');
     });
 
@@ -261,9 +265,9 @@ function MainApp() {
 
       socketRef.current.once('transcription_started', async () => {
         setMicEnabled(true);
+        setTtsEnabled(true);
         setError('');
-        // Send initial TTS enabled state
-        socketRef.current.emit('set_tts_enabled', localStorage.getItem('ttsEnabled') !== 'false');
+        socketRef.current.emit('set_tts_enabled', true);
 
         const audioContext = new AudioContext({ sampleRate: 24000 });
         const source = audioContext.createMediaStreamSource(stream);
@@ -308,6 +312,8 @@ function MainApp() {
       audioStreamRef.current.getTracks().forEach(track => track.stop());
     }
     setMicEnabled(false);
+    setTtsEnabled(false);
+    if (socketRef.current) socketRef.current.emit('set_tts_enabled', false);
     setStatus('idle');
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit('stop_transcription_stream');
@@ -334,7 +340,6 @@ function MainApp() {
   const toggleTts = () => {
     setTtsEnabled(prev => {
       const next = !prev;
-      localStorage.setItem('ttsEnabled', String(next));
       if (socketRef.current?.connected) {
         socketRef.current.emit('set_tts_enabled', next);
       }
@@ -413,7 +418,7 @@ function MainApp() {
         }
         if (e.key === 'm' || e.key === 'M') { e.preventDefault(); toggleMic(); return; }
         if (e.key === 'r' || e.key === 'R') { e.preventDefault(); toggleReadOnly(); return; }
-        if (e.key === 'v' || e.key === 'V') { e.preventDefault(); toggleTts(); return; }
+        if (e.key === 'v' || e.key === 'V') { e.preventDefault(); if (micEnabledRef.current) toggleTts(); return; }
         if (e.key === ',') { e.preventDefault(); navigate('/settings'); return; }
         if (e.key === 'x' || e.key === 'X') { e.preventDefault(); stopAll(); return; }
       }
@@ -499,9 +504,10 @@ function MainApp() {
             </button>
 
             <button
-              className={`tts-toggle${ttsEnabled ? ' active' : ''}${ttsPlaying ? ' playing' : ''}`}
+              className={`tts-toggle${ttsEnabled ? ' active' : ''}${ttsPlaying ? ' playing' : ''}${!micEnabled ? ' disabled' : ''}`}
               onClick={toggleTts}
-              title={ttsEnabled ? 'Disable voice responses (Ctrl+Alt+V)' : 'Enable voice responses (Ctrl+Alt+V)'}
+              disabled={!micEnabled}
+              title={!micEnabled ? 'Enable microphone first' : ttsEnabled ? 'Disable voice responses (Ctrl+Alt+V)' : 'Enable voice responses (Ctrl+Alt+V)'}
             >
               {ttsEnabled ? (
                 <svg viewBox="0 0 24 24" width="20" height="20">
