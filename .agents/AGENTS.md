@@ -35,6 +35,7 @@ This document provides guidelines for agentic coding agents operating in this re
 - Link related specs with cross-references
 - Include a status line at the top: `Status: draft | in-progress | completed | reverted`
 - Every spec should include: Summary, Implementation Plan (with checkmarks), and Testing
+- Every spec should include a Mermaid sequence diagram of the affected flow
 
 ### Commit Rules
 
