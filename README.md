@@ -151,7 +151,7 @@ All decision-making lives in agent prompts, never in application code. Code defi
 - **Error handling**: try/catch for network ops, emit errors via Socket.IO, log with session IDs
 - **Env vars**: secrets in `.env` (never commit), template in `.env.example`
 
-See [AGENTS.md](AGENTS.md) for detailed guidelines.
+See [AGENTS.md](.agents/AGENTS.md) for detailed guidelines.
 
 ## Setting Up an Extensions Fork
 
