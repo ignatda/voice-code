@@ -31,6 +31,9 @@ function MainApp() {
   const conversationEndRef = useRef(null);
   const promptInputRef = useRef(null);
   const ttsAudioRef = useRef(null);
+  const pcmNextTimeRef = useRef(0);
+  const pcmPlayingRef = useRef(false);
+  const pcmContextRef = useRef(null);
   const [ttsEnabled, setTtsEnabled] = useState(() => localStorage.getItem('ttsEnabled') === 'true');
   const [ttsPlaying, setTtsPlaying] = useState(false);
   const ttsPlayingRef = useRef(false);
@@ -145,27 +148,58 @@ function MainApp() {
     socketRef.current.on('voice_response_delta', (data) => {
       if (!data.audio) return;
       const bytes = Uint8Array.from(atob(data.audio), c => c.charCodeAt(0));
-      // Detect format: WAV starts with "RIFF", otherwise assume MP3
+      // Detect format: WAV starts with "RIFF", MP3 with 0xFF or "ID3"
       const isWav = bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46;
+      const isMp3 = bytes[0] === 0xFF || (bytes[0] === 0x49 && bytes[1] === 0x44 && bytes[2] === 0x33);
+
+      if (!isWav && !isMp3) {
+        // Raw PCM16 24kHz mono (from native orchestrator) — play via AudioContext
+        if (!pcmContextRef.current || pcmContextRef.current.state === 'closed') {
+          pcmContextRef.current = new AudioContext({ sampleRate: 24000 });
+        }
+        const ctx = pcmContextRef.current;
+        ctx.resume().then(() => {
+          if (!pcmPlayingRef.current) {
+            pcmPlayingRef.current = true;
+            ttsPlayingRef.current = true;
+            setTtsPlaying(true);
+            if (audioStreamRef.current) audioStreamRef.current.getTracks().forEach(t => t.enabled = false);
+          }
+          // Queue after any previously scheduled audio
+          if (pcmNextTimeRef.current < ctx.currentTime) {
+            pcmNextTimeRef.current = ctx.currentTime;
+          }
+
+          const pcm16 = new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 2);
+          const float32 = new Float32Array(pcm16.length);
+          for (let i = 0; i < pcm16.length; i++) float32[i] = pcm16[i] / 32768.0;
+
+          const buffer = ctx.createBuffer(1, float32.length, 24000);
+          buffer.getChannelData(0).set(float32);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          const startTime = Math.max(ctx.currentTime, pcmNextTimeRef.current);
+          source.start(startTime);
+          pcmNextTimeRef.current = startTime + buffer.duration;
+        });
+        return;
+      }
+
+      // WAV or MP3 — play via Audio element (piped TTS path)
       const blob = new Blob([bytes], { type: isWav ? 'audio/wav' : 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
-      // Stop any currently playing TTS
       if (ttsAudioRef.current) {
         ttsAudioRef.current.pause();
         URL.revokeObjectURL(ttsAudioRef.current.src);
       }
-      // Mute mic to prevent TTS feeding back into STT
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(t => t.enabled = false);
-      }
+      if (audioStreamRef.current) audioStreamRef.current.getTracks().forEach(t => t.enabled = false);
       const audio = new Audio(url);
       const resumeMic = () => {
         URL.revokeObjectURL(url);
         ttsPlayingRef.current = false;
         setTtsPlaying(false);
-        if (audioStreamRef.current && micEnabledRef.current) {
-          audioStreamRef.current.getTracks().forEach(t => t.enabled = true);
-        }
+        if (audioStreamRef.current && micEnabledRef.current) audioStreamRef.current.getTracks().forEach(t => t.enabled = true);
       };
       audio.addEventListener('ended', resumeMic);
       audio.addEventListener('pause', resumeMic);
@@ -173,6 +207,19 @@ function MainApp() {
       ttsPlayingRef.current = true;
       setTtsPlaying(true);
       audio.play().catch(() => resumeMic());
+    });
+
+    socketRef.current.on('voice_response_done', () => {
+      if (pcmPlayingRef.current) {
+        const ctx = pcmContextRef.current;
+        const delay = ctx ? Math.max(0, (pcmNextTimeRef.current - ctx.currentTime) * 1000) : 0;
+        setTimeout(() => {
+          pcmPlayingRef.current = false;
+          ttsPlayingRef.current = false;
+          setTtsPlaying(false);
+          if (audioStreamRef.current && micEnabledRef.current) audioStreamRef.current.getTracks().forEach(t => t.enabled = true);
+        }, delay + 100);
+      }
     });
 
     return () => {

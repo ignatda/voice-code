@@ -29,6 +29,7 @@ This document provides guidelines for agentic coding agents operating in this re
 - Do not create new specs without explicit user approval
 - Always check this directory before implementing a new feature — a spec may already exist
 - Follow the spec precisely when one is provided
+- Every spec must include a granular implementation plan with checkmarks (`- [ ]` / `- [x]`) tracking each step and sub-step
 
 ### Commit Rules
 
@@ -59,6 +60,7 @@ This document provides guidelines for agentic coding agents operating in this re
 | `CODING_CLI`                    | `opencode`, `kiro-cli`, `none`           | `opencode`  | CLI tool for coding tasks                           |
 | `EXTENSIONS`                    | comma-separated names or `none`          | `none`      | Enable extension agents                             |
 | `SCHEDULED_TASKS`               | comma-separated names or `none`          | `none`      | Enable scheduled tasks                              |
+| `ORCHESTRATOR_TYPE`             | `piped`, `native`                        | `piped`     | Orchestrator mode (native = xAI Realtime voice agent)|
 | `PORT`                          | number                                   | `5000`      | Backend server port                                 |
 
 ### Important Gotchas

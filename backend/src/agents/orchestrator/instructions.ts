@@ -1,6 +1,7 @@
 // ── Composable orchestrator instructions ────────────────────────────────────
 
 import { getCurrentProviderName } from '../../core/providers.js';
+import { getAgentsMd } from '../../core/config.js';
 
 export interface InstructionParts {
   readOnlyClause?: string;
@@ -40,5 +41,6 @@ ${parts.extraRouting ? parts.extraRouting + '\n' : ''}\
 
 IMPORTANT: When the user asks to plan or design something, hand off ONLY to Planner Agent — even if they mention code/files/IDE. Planning always goes to planner first.
 ${parts.extraInstructions ? parts.extraInstructions + '\n' : ''}\
-${parts.readOnlyClause ?? ''}${parts.plannerModeClause ?? ''}${parts.pendingPlanClause ?? ''}`;
+${parts.readOnlyClause ?? ''}${parts.plannerModeClause ?? ''}${parts.pendingPlanClause ?? ''}
+${getAgentsMd()}`;
 }

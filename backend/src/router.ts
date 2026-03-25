@@ -10,6 +10,7 @@ import { createSignal, abortAll, cleanup, isStopCommand } from './core/interrupt
 import { createSTTClient, createTTSClient, type VoiceTransport, type TTSTransport } from './agents/voice/index.js';
 import { buildAgentGraph, killTerminalProcess, isPlannerExit } from './agents/index.js';
 import type { AppContext } from './agents/index.js';
+import { createNativeOrchestrator, supportsNative, type NativeOrchestrator } from './agents/orchestrator-native/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,6 +48,7 @@ const statusMap = new Map<string, string>();
 const readOnlyMap = new Map<string, boolean>();
 const voiceClients = new Map<string, VoiceTransport>();
 const ttsClients = new Map<string, TTSTransport>();
+const nativeClients = new Map<string, NativeOrchestrator>();
 const ttsEnabled = new Map<string, boolean>();
 const pendingPlans = new Map<string, string>();
 const plannerMode = new Map<string, boolean>();
@@ -58,6 +60,8 @@ function killAll(sid: string): void {
   killTerminalProcess();
   const tts = ttsClients.get(sid);
   if (tts) { tts.close(); ttsClients.delete(sid); }
+  const native = nativeClients.get(sid);
+  if (native) { native.close(); nativeClients.delete(sid); }
   import('child_process').then(({ execFile }) => {
     execFile(STOP_SCRIPT, (err) => {
       if (err) logger.error(ctx(sid), `[stop] stop.sh error: ${err.message}`);
@@ -307,18 +311,68 @@ export function registerSocketHandlers(io: Server): void {
     });
 
     socket.on('start_transcription_stream', async () => {
-      const apiKey = getSttApiKey();
-      if (!apiKey) {
-        socket.emit('error', { message: 'STT provider API key not configured on server.' });
-        return;
-      }
-      if (voiceClients.has(sid)) {
+      if (voiceClients.has(sid) || nativeClients.has(sid)) {
         socket.emit('error', { message: 'Transcription stream already active.' });
         return;
       }
 
       ensureSession(sid, socket);
       statusMap.set(sid, 'idle');
+
+      // Native orchestrator mode
+      const orchType = process.env.ORCHESTRATOR_TYPE || 'piped';
+      const primaryProvider = (process.env.LLM_PROVIDERS || 'xai').split(',')[0]?.trim();
+      if (orchType === 'native' && primaryProvider && supportsNative(primaryProvider)) {
+        const apiKey = process.env.XAI_API_KEY;
+        if (!apiKey) {
+          socket.emit('error', { message: 'API key not configured for native orchestrator.' });
+          return;
+        }
+        const ideType = process.env.IDE_TYPE || 'jetbrains';
+        const codingCli = process.env.CODING_CLI || 'opencode';
+        try {
+          const nativeOrch = await createNativeOrchestrator(primaryProvider, apiKey, sid, { ideType, codingCli });
+          const sessionId = getActiveSessionId(sid);
+          nativeOrch.setCallbacks(
+            (transcript) => {
+              io.to(sid).emit('transcription_update', { type: 'transcript', text: transcript });
+              if (sessionId) {
+                new SessionStore(sessionId).addDisplayItem({ type: 'user', text: transcript });
+                io.to(sid).emit('session_list', SessionStore.list());
+              }
+              io.to(sid).emit('transcription_result', { original_text: transcript, prompts: [] });
+            },
+            (audio) => io.to(sid).emit('voice_response_delta', { audio }),
+            () => io.to(sid).emit('voice_response_done', {}),
+            (agent, status, message) => {
+              io.to(sid).emit('ide_result', { agent, status, message });
+              if (sessionId) new SessionStore(sessionId).addDisplayItem({ type: 'agent', agent, text: message });
+            },
+            (status) => io.to(sid).emit('status', { status }),
+            (error) => {
+              logger.error(ctx(sid), `[native] Error: ${error}`);
+              io.to(sid).emit('error', { message: error });
+            },
+          );
+          await nativeOrch.connect();
+          nativeClients.set(sid, nativeOrch);
+          ttsEnabled.set(sid, true);
+          socket.emit('transcription_started', { message: 'Connected to native orchestrator.' });
+          socket.emit('status', { status: 'idle' });
+          logger.info(ctx(sid), '[socketio] Native orchestrator started');
+        } catch (error) {
+          logger.error(ctx(sid), `[native] Failed to connect: ${error}`);
+          socket.emit('error', { message: `Failed to connect native orchestrator: ${error}` });
+        }
+        return;
+      }
+
+      // Piped mode (default)
+      const apiKey = getSttApiKey();
+      if (!apiKey) {
+        socket.emit('error', { message: 'STT provider API key not configured on server.' });
+        return;
+      }
 
       const sttProvider = process.env.STT_PROVIDER || 'xai';
       const voiceClient = createSTTClient(sttProvider, apiKey, sid);
@@ -367,7 +421,9 @@ export function registerSocketHandlers(io: Server): void {
 
     socket.on('audio_chunk', (data: unknown) => {
       const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
-      voiceClients.get(sid)?.sendAudio(buffer.toString('base64'));
+      const b64 = buffer.toString('base64');
+      const native = nativeClients.get(sid);
+      if (native) { native.sendAudio(b64); } else { voiceClients.get(sid)?.sendAudio(b64); }
       const currentStatus = statusMap.get(sid);
       if (currentStatus === 'idle' || currentStatus === undefined) {
         statusMap.set(sid, 'listening');
@@ -386,7 +442,14 @@ export function registerSocketHandlers(io: Server): void {
       if (client) {
         client.close();
         voiceClients.delete(sid);
-        socket.emit('transcription_stopped', { message: 'Transcription stream stopped.' });
+      }
+      const native = nativeClients.get(sid);
+      if (native) {
+        native.close();
+        nativeClients.delete(sid);
+      }
+      if (client || native) {
+        socket.emit('transcription_stopped', { message: 'Stream stopped.' });
       } else {
         socket.emit('error', { message: 'No active transcription stream to stop.' });
       }
@@ -407,6 +470,18 @@ export function registerSocketHandlers(io: Server): void {
       ensureSession(sid, socket);
       const sessionId = getActiveSessionId(sid);
       if (sessionId) new SessionStore(sessionId).addInputHistory(text.trim());
+
+      const native = nativeClients.get(sid);
+      if (native) {
+        if (sessionId) {
+          new SessionStore(sessionId).addDisplayItem({ type: 'user', text: text.trim() });
+          io.to(sid).emit('session_list', SessionStore.list());
+        }
+        io.to(sid).emit('transcription_result', { original_text: text.trim(), prompts: [] });
+        native.sendText(text.trim());
+        return;
+      }
+
       statusMap.set(sid, 'executing');
       socket.emit('status', { status: 'executing' });
       processWithOrchestrator(text.trim(), sid, io);
@@ -424,10 +499,9 @@ export function registerSocketHandlers(io: Server): void {
       cleanup(sid);
       socketSession.delete(sid);
       const client = voiceClients.get(sid);
-      if (client) {
-        client.close();
-        voiceClients.delete(sid);
-      }
+      if (client) { client.close(); voiceClients.delete(sid); }
+      const native = nativeClients.get(sid);
+      if (native) { native.close(); nativeClients.delete(sid); }
       statusMap.delete(sid);
       readOnlyMap.delete(sid);
       const tts = ttsClients.get(sid);

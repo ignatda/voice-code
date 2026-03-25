@@ -106,6 +106,7 @@ export function getSettingsSnapshot(): Record<string, string> {
     IDE_TYPE: process.env.IDE_TYPE || 'jetbrains',
     EXTENSIONS: process.env.EXTENSIONS || 'none',
     SCHEDULED_TASKS: process.env.SCHEDULED_TASKS || 'none',
+    ORCHESTRATOR_TYPE: process.env.ORCHESTRATOR_TYPE || 'piped',
   };
 }
 

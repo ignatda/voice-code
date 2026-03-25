@@ -38,6 +38,7 @@ export default function Settings() {
     IDE_TYPE: settings.IDE_TYPE || 'jetbrains',
     EXTENSIONS: settings.EXTENSIONS || 'none',
     SCHEDULED_TASKS: settings.SCHEDULED_TASKS || 'none',
+    ORCHESTRATOR_TYPE: settings.ORCHESTRATOR_TYPE || 'piped',
   }), [settings]);
 
   const [form, setForm] = useState(initial);
@@ -142,6 +143,15 @@ export default function Settings() {
         <label>
           Scheduled Tasks
           <input type="text" value={form.SCHEDULED_TASKS} onChange={set('SCHEDULED_TASKS')} placeholder="none, or comma-separated task names" />
+        </label>
+
+        <label>
+          Orchestrator Type
+          <select value={form.ORCHESTRATOR_TYPE} onChange={set('ORCHESTRATOR_TYPE')}>
+            <option value="piped">Piped (STT → Orchestrator → TTS)</option>
+            <option value="native">Native (xAI Realtime voice agent)</option>
+          </select>
+          <span className="settings-hint">Native mode uses xAI Realtime API as both voice and brain — lower latency, single connection.</span>
         </label>
 
         <div className="settings-actions">
