@@ -40,8 +40,6 @@ Settings are managed via environment variables (`.env`) or the Settings UI at ru
 | `XAI_API_KEY`     | string                                   | —           | x.ai API key                                     |
 | `GEMINI_API_KEY`  | string                                   | —           | Google Gemini API key                            |
 | `GROQ_API_KEY`    | string                                   | —           | Groq API key                                     |
-| `STT_PROVIDER`    | `xai`, `groq`                            | `xai`       | Speech-to-text provider                          |
-| `TTS_PROVIDER`    | `xai`, `groq`, `gemini`, `none`          | `xai`       | Text-to-speech provider                          |
 | `TTS_MAX_LENGTH`  | number                                   | `500`       | Skip TTS for long responses                      |
 | `IDE_TYPE`        | `jetbrains`, `vscode`, `none`            | `jetbrains` | IDE integration                                  |
 | `CODING_CLI`      | `opencode`, `kiro-cli`, `none`           | `opencode`  | CLI tool for coding tasks                        |

@@ -54,8 +54,6 @@ This document provides guidelines for agentic coding agents operating in this re
 | `GEMINI_API_KEY`                | string                                   | —           | Google Gemini API key                               |
 | `GROQ_API_KEY`                  | string                                   | —           | Groq API key                                        |
 | `OPENAI_AGENTS_DISABLE_TRACING` | `1`                                      | `1`         | Must be `1` — SDK tracing is incompatible with Grok |
-| `STT_PROVIDER`                  | `xai`, `groq`                            | `xai`       | Speech-to-text provider                             |
-| `TTS_PROVIDER`                  | `xai`, `groq`, `gemini`, `none`          | `xai`       | Text-to-speech provider                             |
 | `TTS_MAX_LENGTH`                | number                                   | `500`       | Skip TTS for long responses                         |
 | `IDE_TYPE`                      | `jetbrains`, `vscode`, `none`            | `jetbrains` | IDE integration                                     |
 | `CODING_CLI`                    | `opencode`, `kiro-cli`, `none`           | `opencode`  | CLI tool for coding tasks                           |

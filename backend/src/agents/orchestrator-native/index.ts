@@ -26,12 +26,6 @@ export interface NativeOrchestratorOpts {
   codingCli: string;
 }
 
-const NATIVE_PROVIDERS = new Set(['xai']);
-
-export function supportsNative(provider: string): boolean {
-  return NATIVE_PROVIDERS.has(provider);
-}
-
 export async function createNativeOrchestrator(
   provider: string, apiKey: string, sid: string, opts: NativeOrchestratorOpts,
 ): Promise<NativeOrchestrator> {

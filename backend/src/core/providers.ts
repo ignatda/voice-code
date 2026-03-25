@@ -5,6 +5,8 @@ import logger from './logger.js';
 let configs: ProviderConfig[] = [];
 let index = 0;
 
+const NATIVE_PROVIDERS = new Set(['xai']);
+
 function applyProvider(config: ProviderConfig): void {
   logger.info(`[providers] Applying provider=${config.name}, baseURL=${config.baseURL}, model=${config.model}`);
   setDefaultModelProvider(new OpenAIProvider({
@@ -50,6 +52,14 @@ export function getCurrentModel(): string {
 
 export function getCurrentProviderName(): string {
   return configs[index]?.name || '';
+}
+
+export function getCurrentProviderConfig(): ProviderConfig | undefined {
+  return configs[index];
+}
+
+export function supportsNative(provider?: string): boolean {
+  return NATIVE_PROVIDERS.has(provider || getCurrentProviderName());
 }
 
 /** Resolve model for a specific agent based on its per-provider model map. */

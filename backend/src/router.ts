@@ -4,13 +4,14 @@ import { Runner } from '@openai/agents';
 import type { Server } from 'socket.io';
 import logger, { logOrchestratorError } from './core/logger.js';
 import { getXAIConfig } from './core/config.js';
-import { resetRotation, rotateProvider, getCurrentModel, getCurrentProviderName } from './core/providers.js';
+import { resetRotation, rotateProvider, getCurrentModel, getCurrentProviderName, getCurrentProviderConfig, supportsNative } from './core/providers.js';
 import { SessionStore } from './core/session.js';
 import { createSignal, abortAll, cleanup, isStopCommand } from './core/interrupt.js';
 import { createSTTClient, createTTSClient, type VoiceTransport, type TTSTransport } from './agents/voice/index.js';
 import { buildAgentGraph, killTerminalProcess, isPlannerExit } from './agents/index.js';
 import type { AppContext } from './agents/index.js';
-import { createNativeOrchestrator, supportsNative, type NativeOrchestrator } from './agents/orchestrator-native/index.js';
+import { ensureProvider } from './agents/provider.js';
+import { createNativeOrchestrator, type NativeOrchestrator } from './agents/orchestrator-native/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,20 +29,6 @@ function formatError(err: unknown): string {
 /** Log context with sid + current provider */
 const ctx = (sid: string) => ({ sid, provider: getCurrentProviderName() });
 
-const getXaiApiKey = () => process.env.XAI_API_KEY;
-const getSttApiKey = () => {
-  const provider = process.env.STT_PROVIDER || 'xai';
-  if (provider === 'groq') return process.env.GROQ_API_KEY;
-  if (provider === 'gemini') return process.env.GEMINI_API_KEY;
-  return process.env.XAI_API_KEY;
-};
-
-const getTtsApiKey = () => {
-  const provider = process.env.TTS_PROVIDER || process.env.STT_PROVIDER || 'xai';
-  if (provider === 'groq') return process.env.GROQ_API_KEY;
-  if (provider === 'gemini') return process.env.GEMINI_API_KEY;
-  return process.env.XAI_API_KEY;
-};
 
 const socketSession = new Map<string, string>();
 const statusMap = new Map<string, string>();
@@ -310,6 +297,77 @@ export function registerSocketHandlers(io: Server): void {
       socket.emit('session_deleted', sessionId);
     });
 
+    // ── Helper: start piped mode (STT + TTS) ──────────────────────
+    async function startPipedMode(socket: any, sid: string): Promise<boolean> {
+      ensureProvider();
+      const pc = getCurrentProviderConfig();
+      if (!pc) {
+        socket.emit('error', { message: 'No LLM provider configured.' });
+        return false;
+      }
+
+      const voiceClient = createSTTClient(pc.name, pc.apiKey, sid);
+      voiceClient.setCallbacks(
+        (transcript: string) => {
+          io.to(sid).emit('transcription_update', { type: 'transcript', text: transcript });
+          statusMap.set(sid, 'executing');
+          socket.emit('status', { status: 'executing' });
+          processWithOrchestrator(transcript, sid, io);
+        },
+        (status: string) => { io.to(sid).emit('status', { status }); },
+        (error: string) => {
+          logger.info(ctx(sid), `[voice] Error: ${error}`);
+          if (rotateProvider()) {
+            logger.info(ctx(sid), `[stt] Rotated provider to ${getCurrentProviderName()}`);
+            io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: 'stt_error' });
+          }
+          io.to(sid).emit('error', { message: error });
+        },
+      );
+
+      try {
+        await voiceClient.connect();
+        voiceClients.set(sid, voiceClient);
+
+        const ttsClient = createTTSClient(pc.name, pc.apiKey, sid);
+        ttsClient.setCallbacks(
+          (audio) => io.to(sid).emit('voice_response_delta', { audio }),
+          () => io.to(sid).emit('voice_response_done', {}),
+          (error) => {
+            logger.error(ctx(sid), `[tts] Error: ${error}`);
+            // Rotate and recreate TTS on error
+            if (rotateProvider()) {
+              logger.info(ctx(sid), `[tts] Rotated provider to ${getCurrentProviderName()}`);
+              io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: 'tts_error' });
+              const newPc = getCurrentProviderConfig()!;
+              const newTts = createTTSClient(newPc.name, newPc.apiKey, sid);
+              newTts.setCallbacks(
+                (audio) => io.to(sid).emit('voice_response_delta', { audio }),
+                () => io.to(sid).emit('voice_response_done', {}),
+                (err) => logger.error(ctx(sid), `[tts] Error after rotation: ${err}`),
+              );
+              ttsClients.set(sid, newTts);
+            }
+          },
+        );
+        ttsClients.set(sid, ttsClient);
+        ttsEnabled.set(sid, false);
+        logger.info(ctx(sid), `[tts] Client created`);
+        return true;
+      } catch (error) {
+        logger.info(ctx(sid), `[voice] Failed to connect: ${error}`);
+        voiceClients.delete(sid);
+        // Try rotating to next provider
+        if (rotateProvider()) {
+          logger.info(ctx(sid), `[stt] Connect failed, rotated to ${getCurrentProviderName()}`);
+          io.to(sid).emit('provider_rotated', { provider: getCurrentProviderName(), reason: 'stt_connect_error' });
+          return startPipedMode(socket, sid);
+        }
+        socket.emit('error', { message: `Failed to connect to STT provider: ${error}` });
+        return false;
+      }
+    }
+
     socket.on('start_transcription_stream', async () => {
       if (voiceClients.has(sid) || nativeClients.has(sid)) {
         socket.emit('error', { message: 'Transcription stream already active.' });
@@ -321,17 +379,13 @@ export function registerSocketHandlers(io: Server): void {
 
       // Native orchestrator mode
       const orchType = process.env.ORCHESTRATOR_TYPE || 'piped';
-      const primaryProvider = (process.env.LLM_PROVIDERS || 'xai').split(',')[0]?.trim();
-      if (orchType === 'native' && primaryProvider && supportsNative(primaryProvider)) {
-        const apiKey = process.env.XAI_API_KEY;
-        if (!apiKey) {
-          socket.emit('error', { message: 'API key not configured for native orchestrator.' });
-          return;
-        }
+      ensureProvider();
+      const providerConfig = getCurrentProviderConfig();
+      if (orchType === 'native' && providerConfig && supportsNative()) {
         const ideType = process.env.IDE_TYPE || 'jetbrains';
         const codingCli = process.env.CODING_CLI || 'opencode';
         try {
-          const nativeOrch = await createNativeOrchestrator(primaryProvider, apiKey, sid, { ideType, codingCli });
+          const nativeOrch = await createNativeOrchestrator(providerConfig.name, providerConfig.apiKey, sid, { ideType, codingCli });
           const sessionId = getActiveSessionId(sid);
           nativeOrch.setCallbacks(
             (transcript) => {
@@ -352,6 +406,16 @@ export function registerSocketHandlers(io: Server): void {
             (error) => {
               logger.error(ctx(sid), `[native] Error: ${error}`);
               io.to(sid).emit('error', { message: error });
+              // Fall back to piped mode (same provider, no rotation)
+              logger.info(ctx(sid), '[native] Falling back to piped mode');
+              nativeClients.get(sid)?.close();
+              nativeClients.delete(sid);
+              startPipedMode(socket, sid).then(ok => {
+                if (ok) {
+                  socket.emit('transcription_started', { message: 'Fell back to piped mode.' });
+                  socket.emit('status', { status: 'idle' });
+                }
+              });
             },
           );
           await nativeOrch.connect();
@@ -362,60 +426,21 @@ export function registerSocketHandlers(io: Server): void {
           logger.info(ctx(sid), '[socketio] Native orchestrator started');
         } catch (error) {
           logger.error(ctx(sid), `[native] Failed to connect: ${error}`);
-          socket.emit('error', { message: `Failed to connect native orchestrator: ${error}` });
+          logger.info(ctx(sid), '[native] Falling back to piped mode');
+          // Fall back to piped (same provider, no rotation)
+          if (await startPipedMode(socket, sid)) {
+            socket.emit('transcription_started', { message: 'Native failed, using piped mode.' });
+            socket.emit('status', { status: 'idle' });
+          }
         }
         return;
       }
 
       // Piped mode (default)
-      const apiKey = getSttApiKey();
-      if (!apiKey) {
-        socket.emit('error', { message: 'STT provider API key not configured on server.' });
-        return;
-      }
-
-      const sttProvider = process.env.STT_PROVIDER || 'xai';
-      const voiceClient = createSTTClient(sttProvider, apiKey, sid);
-      voiceClient.setCallbacks(
-        (transcript: string) => {
-          io.to(sid).emit('transcription_update', { type: 'transcript', text: transcript });
-          statusMap.set(sid, 'executing');
-          socket.emit('status', { status: 'executing' });
-          processWithOrchestrator(transcript, sid, io);
-        },
-        (status: string) => { io.to(sid).emit('status', { status }); },
-        (error: string) => {
-          logger.info(ctx(sid), `[voice] Error: ${error}`);
-          io.to(sid).emit('error', { message: error });
-        },
-      );
-
-      try {
-        await voiceClient.connect();
-        voiceClients.set(sid, voiceClient);
-
-        // Create TTS client alongside STT
-        const ttsProvider = process.env.TTS_PROVIDER || process.env.STT_PROVIDER || 'xai';
-        const ttsApiKey = getTtsApiKey();
-        if (ttsApiKey && ttsProvider !== 'none') {
-          const ttsClient = createTTSClient(ttsProvider, ttsApiKey, sid);
-          ttsClient.setCallbacks(
-            (audio) => io.to(sid).emit('voice_response_delta', { audio }),
-            () => io.to(sid).emit('voice_response_done', {}),
-            (error) => logger.error(ctx(sid), `[tts] Error: ${error}`),
-          );
-          ttsClients.set(sid, ttsClient);
-          ttsEnabled.set(sid, false);
-          logger.info(ctx(sid), `[tts] Client created`);
-        }
-
+      if (await startPipedMode(socket, sid)) {
         socket.emit('transcription_started', { message: 'Connected to STT provider and ready for audio.' });
         socket.emit('status', { status: 'idle' });
         logger.info(ctx(sid), '[socketio] Transcription stream started');
-      } catch (error) {
-        logger.info(ctx(sid), `[voice] Failed to connect: ${error}`);
-        socket.emit('error', { message: `Failed to connect to STT provider: ${error}` });
-        voiceClients.delete(sid);
       }
     });
 
