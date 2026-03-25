@@ -1,6 +1,8 @@
 # Feature: Unified Provider Fallback
 
-## Summary
+Status: completed
+
+Related: [orchestrator-native](orchestrator-native.md)
 
 Remove separate `STT_PROVIDER`, `TTS_PROVIDER` env vars. All capabilities (STT, TTS, LLM, native/STS) come from `LLM_PROVIDERS` with automatic fallback rotation. One provider list, one fallback chain.
 

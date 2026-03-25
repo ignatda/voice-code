@@ -1,5 +1,9 @@
 # Feature: Native Orchestrator (Realtime Voice Agent)
 
+Status: completed
+
+Related: [piped-orchestrator-streaming](piped-orchestrator-streaming.md), [unified-provider-fallback](unified-provider-fallback.md)
+
 ## Summary
 
 Replace the piped STT → SDK Orchestrator → TTS pipeline with a native realtime voice agent that uses the provider's built-in function calling to route and execute tasks. The voice API itself becomes the orchestrator — audio in, tool calls, audio out, all in one WebSocket session.

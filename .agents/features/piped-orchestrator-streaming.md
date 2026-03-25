@@ -1,30 +1,67 @@
-# Feature: Piped Orchestrator Streaming Improvements
+# Feature: Piped Orchestrator Streaming
 
-## Summary
+Status: draft
 
-Improve the piped orchestrator mode so that:
-1. The orchestrator's status message ("Let me search the web...") is spoken BEFORE the sub-agent executes, not after
-2. The orchestrator provides a voice summary of the sub-agent's result after execution completes
+Related: [orchestrator-native](orchestrator-native.md)
+
+Use SDK streaming (`{ stream: true }`) in piped mode to speak the orchestrator's status message BEFORE the sub-agent executes, and speak a summary AFTER.
 
 ## Current Behavior
 
-The SDK `Runner.run()` executes the full chain synchronously — orchestrator → handoff → sub-agent → result. The orchestrator narration is only extractable after the entire run completes, so TTS speaks it after the browser/IDE has already finished.
+`Runner.run()` executes synchronously — orchestrator → handoff → sub-agent → result. The orchestrator's narration ("Let me search the web...") is only available after the entire chain completes.
 
 ## Desired Behavior
 
 ```
-User speaks → STT → Orchestrator decides → speaks "Let me search for that" (immediate)
-  → Browser Agent executes (user hears status while waiting)
-  → Orchestrator summarizes result → speaks summary
+User speaks → STT → Orchestrator streams → speaks "Let me search for that" (immediate)
+  → Handoff to Browser Agent (user hears status while waiting)
+  → Browser Agent completes → result displayed in UI
+  → Orchestrator summary spoken via TTS
 ```
 
-## Implementation Ideas
+## Technical Approach
 
-- [ ] Use SDK streaming/hooks to intercept orchestrator output before handoff
-- [ ] Or split the run into two phases: orchestrator routing (with TTS) → sub-agent execution → summary
-- [ ] Add a post-execution summary step: run orchestrator again with the sub-agent result to generate a spoken summary
+Use `run(agent, input, { stream: true })` and listen to stream events:
+
+1. `run_item_stream_event` with `name: 'message_output_created'` — orchestrator's text before handoff → speak via TTS immediately
+2. `agent_updated_stream_event` — agent switched (handoff occurred) → emit status to UI
+3. `run_item_stream_event` with `name: 'handoff_occurred'` — handoff completed
+4. After `stream.completed` — extract final output, speak summary via TTS
+
+Key SDK streaming events:
+- `raw_model_stream_event` — token-by-token text deltas
+- `run_item_stream_event` — SDK items (messages, tool calls, handoffs)
+- `agent_updated_stream_event` — agent switches
+
+## Implementation Plan
+
+- [ ] **Step 1: Switch `processWithOrchestrator` to streaming mode**
+  - [ ] Replace `new Runner().run(...)` with `run(agent, input, { stream: true })`
+  - [ ] Iterate stream events with `for await (const event of result)`
+  - [ ] Await `result.completed` after loop
+
+- [ ] **Step 2: Intercept orchestrator narration before handoff**
+  - [ ] On `run_item_stream_event` with `name: 'message_output_created'` where agent is Orchestrator
+  - [ ] Extract text from the message item
+  - [ ] Call `speakIfEnabled()` immediately (non-blocking)
+  - [ ] Emit `ide_result` with orchestrator narration to UI
+
+- [ ] **Step 3: Emit agent switch status to UI**
+  - [ ] On `agent_updated_stream_event` — emit status showing which agent is now active
+  - [ ] On `run_item_stream_event` with `name: 'handoff_occurred'` — emit handoff info
+
+- [ ] **Step 4: Handle final output and summary**
+  - [ ] After `stream.completed`, extract `result.finalOutput`
+  - [ ] Emit sub-agent result to UI (same as current behavior)
+  - [ ] Speak summary via TTS (the sub-agent's final output, truncated)
+
+- [ ] **Step 5: Preserve existing error handling and provider rotation**
+  - [ ] Wrap streaming in try/catch with same `isRetryable` + `rotateProvider` logic
+  - [ ] Ensure abort signal still works for stop commands
 
 ## Notes
 
-- Native orchestrator already handles this naturally (xAI speaks before and after tool calls)
-- This is a pre-existing limitation, not a regression
+- Native orchestrator already handles this naturally (xAI Realtime speaks before and after tool calls)
+- This only affects piped mode
+- The `{ stream: true }` option works with Chat Completions mode (`useResponses: false`)
+- `stream.completed` must be awaited to ensure all output is flushed

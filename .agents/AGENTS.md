@@ -30,6 +30,11 @@ This document provides guidelines for agentic coding agents operating in this re
 - Always check this directory before implementing a new feature — a spec may already exist
 - Follow the spec precisely when one is provided
 - Every spec must include a granular implementation plan with checkmarks (`- [ ]` / `- [x]`) tracking each step and sub-step
+- Update checkmarks and add implementation details as work progresses
+- Document key decisions and tradeoffs in the spec
+- Link related specs with cross-references
+- Include a status line at the top: `Status: draft | in-progress | completed | reverted`
+- Every spec should include: Summary, Implementation Plan (with checkmarks), and Testing
 
 ### Commit Rules
 
