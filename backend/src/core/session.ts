@@ -154,7 +154,7 @@ export class SessionStore implements SDKSession {
   static create(): { id: string; name: string; items: ConversationItem[] } {
     ensureDir();
     const id = crypto.randomUUID();
-    const meta: SessionMeta = { name: 'New session', createdAt: Date.now(), displayItems: [] };
+    const meta: SessionMeta = { name: 'New session', createdAt: Date.now(), displayItems: [], messageCount: 0};
     fs.writeFileSync(metaPath(id), JSON.stringify(meta), 'utf-8');
     return { id, name: meta.name, items: [] };
   }
